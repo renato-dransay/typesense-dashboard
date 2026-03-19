@@ -3,21 +3,14 @@
     <!-- Header -->
     <div class="row items-center q-mb-md">
       <q-icon name="sym_s_low_priority" size="md" class="q-mr-sm" />
-      <div class="text-h5">Visual Override Editor</div>
+      <div class="text-h5">Search Rules</div>
       <q-space />
       <q-btn
-        v-if="!showJsonEditor"
-        flat
-        icon="sym_s_code"
-        label="Edit JSON"
-        @click="openJsonEditor"
-      />
-      <q-btn
-        v-else
-        flat
-        icon="sym_s_visibility"
-        label="Visual Editor"
-        @click="closeJsonEditor"
+        unelevated
+        color="primary"
+        icon="sym_s_add"
+        label="Create New Rule"
+        @click="openCreateForm"
       />
     </div>
 
@@ -27,137 +20,243 @@
     </q-banner>
 
     <template v-if="store.currentCollection">
-      <!-- Main form / JSON editor toggle -->
-      <template v-if="!showJsonEditor">
-        <!-- Override ID and Rule -->
-        <q-card flat bordered class="q-mb-md">
-          <q-card-section>
-            <div class="text-subtitle1 q-mb-sm">Override Rule</div>
-            <div class="row q-gutter-sm">
-              <q-input
-                v-model="overrideForm.id"
-                dense
-                filled
-                label="Override ID"
-                class="col"
-              />
-              <q-input
-                v-model="overrideForm.rule.query"
-                dense
-                filled
-                label="Query pattern"
-                class="col"
-              />
-              <q-select
-                v-model="overrideForm.rule.match"
-                dense
-                filled
-                label="Match type"
-                :options="['exact', 'contains']"
-                class="col-auto"
-                style="min-width: 150px"
-              />
-            </div>
-          </q-card-section>
-        </q-card>
+      <!-- Existing overrides list (shown first, above the fold) -->
+      <div class="q-mb-md">
+        <div class="row items-center q-mb-sm">
+          <div class="text-subtitle1">Existing Rules</div>
+          <q-space />
+          <q-input
+            v-model="listFilter"
+            dense
+            filled
+            placeholder="Filter by tag..."
+            class="q-mr-sm"
+            style="width: 200px"
+            clearable
+          />
+          <q-btn flat dense icon="sym_s_refresh" @click="refreshOverrides" />
+        </div>
 
-        <!-- Filter, Sort, Scheduling, Tags (T-051) -->
-        <q-card flat bordered class="q-mb-md">
-          <q-card-section>
-            <div class="text-subtitle1 q-mb-sm">Injections &amp; Scheduling</div>
-            <div class="row q-gutter-sm q-mb-sm">
-              <q-input
-                v-model="overrideForm.filter_by"
-                dense
-                filled
-                label="Filter injection (filter_by clause)"
-                class="col"
-                placeholder="e.g. category:shoes"
-              />
-              <q-input
-                v-model="overrideForm.sort_by"
-                dense
-                filled
-                label="Sort injection (sort_by clause)"
-                class="col"
-                placeholder="e.g. price:asc"
-              />
-            </div>
-            <div class="row q-gutter-sm q-mb-sm">
-              <q-input
-                v-model="effectiveFromStr"
-                dense
-                filled
-                label="Effective from"
-                type="datetime-local"
-                class="col"
-              />
-              <q-input
-                v-model="effectiveToStr"
-                dense
-                filled
-                label="Effective to"
-                type="datetime-local"
-                class="col"
-              />
-            </div>
-            <div class="row q-gutter-sm">
-              <q-select
-                v-model="tags"
-                dense
-                filled
-                label="Tags"
-                class="col"
-                use-input
-                use-chips
-                multiple
-                hide-dropdown-icon
-                input-debounce="0"
-                new-value-mode="add-unique"
-                placeholder="Type and press Enter to add tags"
-              />
-            </div>
-          </q-card-section>
-        </q-card>
+        <!-- Empty state -->
+        <div v-if="filteredOverrides.length === 0" class="text-center q-pa-xl text-grey-6">
+          <q-icon name="sym_s_low_priority" size="xl" class="q-mb-sm" />
+          <div class="text-body1">No search rules yet.</div>
+          <div class="text-caption">Create a rule to control what products appear for specific searches.</div>
+        </div>
 
-        <!-- Search bar for finding products to pin/hide -->
-        <q-card flat bordered class="q-mb-md">
+        <!-- Rule cards -->
+        <q-card
+          v-for="rule in filteredOverrides"
+          :key="rule.id"
+          flat
+          bordered
+          class="q-mb-sm"
+        >
           <q-card-section>
-            <div class="text-subtitle1 q-mb-sm">Search Products to Pin / Hide</div>
-            <div class="row q-gutter-sm">
-              <q-input
-                v-model="searchQuery"
-                dense
-                filled
-                label="Search products..."
-                class="col"
-                @keyup.enter="doSearch"
-              >
-                <template #append>
-                  <q-icon
-                    name="sym_s_search"
-                    class="cursor-pointer"
-                    @click="doSearch"
+            <div class="row items-center no-wrap">
+              <div class="col">
+                <div class="text-weight-bold">{{ rule.id }}</div>
+                <div class="text-body2 q-mt-xs">
+                  When someone searches
+                  <span class="text-weight-medium text-primary">"{{ rule.rule?.query }}"</span>
+                  <q-badge
+                    :label="rule.rule?.match === 'exact' ? 'Exact' : 'Contains'"
+                    :color="rule.rule?.match === 'exact' ? 'deep-purple-4' : 'teal-4'"
+                    class="q-ml-xs"
                   />
-                </template>
-              </q-input>
+                </div>
+                <div v-if="(rule.includes || []).length > 0" class="text-caption q-mt-xs">
+                  Pinned: {{ formatProductList(rule.includes || []) }}
+                </div>
+                <div class="q-mt-xs q-gutter-xs">
+                  <q-badge
+                    :color="getOverrideStatus(rule).color"
+                    :label="getOverrideStatus(rule).label"
+                  />
+                  <q-chip
+                    v-for="tag in getOverrideTags(rule)"
+                    :key="tag"
+                    dense
+                    size="sm"
+                    color="primary"
+                    text-color="white"
+                  >
+                    {{ tag }}
+                  </q-chip>
+                </div>
+              </div>
+              <div class="col-auto q-gutter-xs">
+                <q-btn flat dense icon="sym_s_edit" title="Edit" @click="editOverride(rule)" />
+                <q-btn flat dense icon="sym_s_content_copy" title="Duplicate" @click="duplicateOverride(rule)" />
+                <q-btn
+                  flat
+                  dense
+                  color="negative"
+                  icon="sym_s_delete_forever"
+                  title="Delete"
+                  @click="confirmDeleteOverride(rule.id)"
+                />
+              </div>
             </div>
           </q-card-section>
+        </q-card>
+      </div>
 
-          <!-- Search results -->
-          <q-card-section v-if="searchResults.length > 0">
-            <q-list separator>
-              <q-item v-for="(hit, idx) in searchResults" :key="idx">
-                <q-item-section>
-                  <q-item-label>
-                    <span class="text-weight-medium">ID: {{ getDocId(hit) }}</span>
-                  </q-item-label>
-                  <q-item-label caption class="ellipsis-2-lines">
-                    {{ getDocSummary(hit) }}
-                  </q-item-label>
-                </q-item-section>
-                <q-item-section side>
-                  <div class="row items-center q-gutter-sm">
+      <!-- Collapsible creation/edit form -->
+      <template v-if="showForm">
+        <!-- Main form / JSON editor toggle -->
+        <template v-if="!showJsonEditor">
+          <!-- Search Rule -->
+          <q-card flat bordered class="q-mb-md">
+            <q-card-section>
+              <div class="row items-center q-mb-sm">
+                <div class="text-subtitle1">Search Rule</div>
+                <q-space />
+                <q-btn flat dense icon="sym_s_close" title="Close form" @click="showForm = false" />
+              </div>
+              <div class="row q-gutter-sm">
+                <q-input
+                  v-model="ruleName"
+                  dense
+                  filled
+                  label="Rule Name"
+                  class="col"
+                />
+                <q-input
+                  v-model="overrideForm.rule.query"
+                  dense
+                  filled
+                  label="When someone searches for..."
+                  class="col"
+                />
+                <q-select
+                  v-model="overrideForm.rule.match"
+                  dense
+                  filled
+                  label="Match type"
+                  :options="matchTypeOptions"
+                  option-value="value"
+                  option-label="label"
+                  emit-value
+                  map-options
+                  class="col-auto"
+                  style="min-width: 200px"
+                />
+              </div>
+              <q-expansion-item
+                dense
+                label="Advanced"
+                icon="sym_s_settings"
+                class="q-mt-sm"
+                header-class="text-caption"
+              >
+                <q-input
+                  v-model="overrideForm.id"
+                  dense
+                  filled
+                  label="Override ID (internal)"
+                  class="q-mt-sm"
+                />
+                <div class="q-mt-sm">
+                  <q-btn
+                    v-if="!showJsonEditor"
+                    flat
+                    dense
+                    icon="sym_s_code"
+                    label="Edit JSON"
+                    @click="openJsonEditor"
+                  />
+                </div>
+              </q-expansion-item>
+            </q-card-section>
+          </q-card>
+
+          <!-- Filter, Sort, Scheduling, Tags (T-051) -->
+          <q-card flat bordered class="q-mb-md">
+            <q-card-section>
+              <div class="text-subtitle1 q-mb-sm">Filters &amp; Scheduling</div>
+              <div class="q-mb-sm">
+                <div class="text-caption q-mb-xs">Filter injection</div>
+                <FilterBuilder v-model="overrideForm.filter_by" :fields="collectionFields" />
+              </div>
+              <div class="q-mb-sm">
+                <div class="text-caption q-mb-xs">Sort injection</div>
+                <SortBuilder v-model="overrideForm.sort_by" :fields="collectionFields" />
+              </div>
+              <div class="row q-gutter-sm q-mb-sm">
+                <q-input
+                  v-model="effectiveFromStr"
+                  dense
+                  filled
+                  label="Effective from"
+                  type="datetime-local"
+                  class="col"
+                />
+                <q-input
+                  v-model="effectiveToStr"
+                  dense
+                  filled
+                  label="Effective to"
+                  type="datetime-local"
+                  class="col"
+                />
+              </div>
+              <div class="row q-gutter-sm">
+                <q-select
+                  v-model="tags"
+                  dense
+                  filled
+                  label="Tags"
+                  class="col"
+                  use-input
+                  use-chips
+                  multiple
+                  hide-dropdown-icon
+                  input-debounce="0"
+                  new-value-mode="add-unique"
+                  placeholder="Type and press Enter to add tags"
+                />
+              </div>
+            </q-card-section>
+          </q-card>
+
+          <!-- Search bar for finding products to pin/hide -->
+          <q-card flat bordered class="q-mb-md">
+            <q-card-section>
+              <div class="text-subtitle1 q-mb-sm">Search Products to Pin / Hide</div>
+              <div class="row q-gutter-sm">
+                <q-input
+                  v-model="searchQuery"
+                  dense
+                  filled
+                  label="Search products..."
+                  class="col"
+                  @keyup.enter="doSearch"
+                >
+                  <template #append>
+                    <q-icon
+                      name="sym_s_search"
+                      class="cursor-pointer"
+                      @click="doSearch"
+                    />
+                  </template>
+                </q-input>
+              </div>
+            </q-card-section>
+
+            <!-- Search results -->
+            <q-card-section v-if="searchResults.length > 0">
+              <q-list separator>
+                <ProductCard
+                  v-for="(hit, idx) in searchResults"
+                  :key="idx"
+                  :document="hit.document || hit"
+                  :fields="collectionFields"
+                  type="search-result"
+                  @pin="pinProduct(hit, idx)"
+                  @hide="hideProduct(hit)"
+                >
+                  <template #pin-controls>
                     <q-input
                       v-model.number="pinPositions[idx]"
                       dense
@@ -167,243 +266,171 @@
                       style="width: 70px"
                       :min="1"
                     />
-                    <q-btn
-                      flat
-                      dense
-                      color="positive"
-                      icon="sym_s_push_pin"
-                      label="Pin"
-                      @click="pinProduct(hit, idx)"
-                    />
-                    <q-btn
-                      flat
-                      dense
-                      color="negative"
-                      icon="sym_s_visibility_off"
-                      label="Hide"
-                      @click="hideProduct(hit)"
-                    />
-                  </div>
-                </q-item-section>
-              </q-item>
-            </q-list>
-          </q-card-section>
+                  </template>
+                </ProductCard>
+              </q-list>
+            </q-card-section>
 
-          <q-card-section v-if="searchLoading">
-            <q-spinner-dots size="md" />
-          </q-card-section>
-        </q-card>
+            <q-card-section v-if="searchLoading">
+              <q-spinner-dots size="md" />
+            </q-card-section>
+          </q-card>
 
-        <!-- Pinned products -->
-        <q-card v-if="overrideForm.includes.length > 0" flat bordered class="q-mb-md">
-          <q-card-section>
-            <div class="text-subtitle1 q-mb-sm">Pinned Products (includes)</div>
-            <q-list separator>
-              <q-item v-for="(inc, idx) in overrideForm.includes" :key="'inc-' + idx">
-                <q-item-section>
-                  <q-item-label>ID: {{ inc.id }} - Position: {{ inc.position }}</q-item-label>
-                </q-item-section>
-                <q-item-section side>
-                  <q-btn
-                    flat
-                    dense
-                    color="negative"
-                    icon="sym_s_close"
-                    @click="overrideForm.includes.splice(idx, 1)"
-                  />
-                </q-item-section>
-              </q-item>
-            </q-list>
-          </q-card-section>
-        </q-card>
+          <!-- Pinned products -->
+          <q-card v-if="overrideForm.includes.length > 0" flat bordered class="q-mb-md">
+            <q-card-section>
+              <div class="text-subtitle1 q-mb-sm">Pinned Products</div>
+              <q-list separator>
+                <ProductCard
+                  v-for="(inc, idx) in overrideForm.includes"
+                  :key="'inc-' + idx"
+                  :document="productDetailsCache.get(String(inc.id)) || { id: inc.id }"
+                  :fields="collectionFields"
+                  type="pinned"
+                  :position="inc.position"
+                  @remove="overrideForm.includes.splice(idx, 1)"
+                />
+              </q-list>
+            </q-card-section>
+          </q-card>
 
-        <!-- Hidden products -->
-        <q-card v-if="overrideForm.excludes.length > 0" flat bordered class="q-mb-md">
-          <q-card-section>
-            <div class="text-subtitle1 q-mb-sm">Hidden Products (excludes)</div>
-            <q-list separator>
-              <q-item v-for="(exc, idx) in overrideForm.excludes" :key="'exc-' + idx">
-                <q-item-section>
-                  <q-item-label>ID: {{ exc.id }}</q-item-label>
-                </q-item-section>
-                <q-item-section side>
-                  <q-btn
-                    flat
-                    dense
-                    color="negative"
-                    icon="sym_s_close"
-                    @click="overrideForm.excludes.splice(idx, 1)"
-                  />
-                </q-item-section>
-              </q-item>
-            </q-list>
-          </q-card-section>
-        </q-card>
+          <!-- Hidden products -->
+          <q-card v-if="overrideForm.excludes.length > 0" flat bordered class="q-mb-md">
+            <q-card-section>
+              <div class="text-subtitle1 q-mb-sm">Hidden Products</div>
+              <q-list separator>
+                <ProductCard
+                  v-for="(exc, idx) in overrideForm.excludes"
+                  :key="'exc-' + idx"
+                  :document="productDetailsCache.get(String(exc.id)) || { id: exc.id }"
+                  :fields="collectionFields"
+                  type="hidden"
+                  @remove="overrideForm.excludes.splice(idx, 1)"
+                />
+              </q-list>
+            </q-card-section>
+          </q-card>
 
-        <!-- Save button -->
-        <div class="row q-gutter-sm q-mb-md">
-          <q-btn
-            :loading="saving"
-            unelevated
-            color="primary"
-            label="Save Override"
-            :disable="!canSave"
-            @click="saveOverride"
-          />
-          <q-btn
-            flat
-            label="Preview"
-            icon="sym_s_compare"
-            @click="showPreviewPanel = !showPreviewPanel"
-          />
-          <q-btn flat label="Reset" @click="resetForm" />
-        </div>
-
-        <!-- Preview panel (T-052) -->
-        <q-card v-if="showPreviewPanel" flat bordered class="q-mb-md">
-          <q-card-section>
-            <div class="text-subtitle1 q-mb-sm">Preview: With Override vs Without Override</div>
+          <!-- Save button -->
+          <div class="row q-gutter-sm q-mb-md">
             <q-btn
-              :loading="previewLoading"
-              dense
-              flat
-              label="Run Preview"
+              :loading="saving"
+              unelevated
               color="primary"
-              class="q-mb-sm"
-              @click="runPreview"
+              label="Save Rule"
+              :disable="!canSave"
+              @click="saveOverride"
             />
-          </q-card-section>
-          <q-card-section v-if="previewWithResults.length > 0 || previewWithoutResults.length > 0">
-            <div class="row q-gutter-md">
-              <!-- With override -->
-              <div class="col">
-                <div class="text-subtitle2 q-mb-xs">With Override</div>
-                <q-list dense separator bordered>
-                  <q-item
-                    v-for="(doc, idx) in previewWithResults"
-                    :key="'pw-' + idx"
-                    :class="previewDiffClass(doc, idx)"
-                  >
-                    <q-item-section>
-                      <q-item-label>
-                        <span class="text-caption text-grey q-mr-xs">#{{ idx + 1 }}</span>
-                        <span class="text-weight-medium">{{ getDocId(doc) }}</span>
-                      </q-item-label>
-                      <q-item-label caption class="ellipsis">{{ getDocSummary(doc) }}</q-item-label>
-                    </q-item-section>
-                  </q-item>
-                </q-list>
-              </div>
-              <!-- Without override -->
-              <div class="col">
-                <div class="text-subtitle2 q-mb-xs">Without Override</div>
-                <q-list dense separator bordered>
-                  <q-item
-                    v-for="(doc, idx) in previewWithoutResults"
-                    :key="'pwo-' + idx"
-                  >
-                    <q-item-section>
-                      <q-item-label>
-                        <span class="text-caption text-grey q-mr-xs">#{{ idx + 1 }}</span>
-                        <span class="text-weight-medium">{{ getDocId(doc) }}</span>
-                      </q-item-label>
-                      <q-item-label caption class="ellipsis">{{ getDocSummary(doc) }}</q-item-label>
-                    </q-item-section>
-                  </q-item>
-                </q-list>
-              </div>
-            </div>
-          </q-card-section>
-        </q-card>
-      </template>
-
-      <!-- JSON Editor mode (T-052) -->
-      <template v-else>
-        <q-card flat bordered class="q-mb-md" style="height: 60vh">
-          <monaco-editor v-model="jsonEditorValue" />
-        </q-card>
-        <q-banner v-if="jsonError" inline-actions class="text-white bg-red q-mb-md">
-          Invalid JSON: {{ jsonError }}
-        </q-banner>
-        <div class="row q-gutter-sm q-mb-md">
-          <q-btn
-            :loading="saving"
-            unelevated
-            color="primary"
-            label="Save Override"
-            :disable="!!jsonError || !canSave"
-            @click="saveOverride"
-          />
-          <q-btn flat label="Reset" @click="resetForm" />
-        </div>
-      </template>
-
-      <!-- Existing overrides list -->
-      <q-card flat bordered>
-        <q-card-section>
-          <div class="row items-center q-mb-sm">
-            <div class="text-subtitle1">Existing Overrides</div>
-            <q-space />
-            <q-input
-              v-model="listFilter"
-              dense
-              filled
-              placeholder="Filter by tag..."
-              class="q-mr-sm"
-              style="width: 200px"
-              clearable
+            <q-btn
+              flat
+              label="Preview"
+              icon="sym_s_compare"
+              @click="showPreviewPanel = !showPreviewPanel"
             />
-            <q-btn flat dense icon="sym_s_refresh" @click="refreshOverrides" />
+            <q-btn flat label="Reset" @click="resetForm" />
           </div>
-        </q-card-section>
-        <q-table
-          flat
-          :rows="filteredOverrides"
-          :columns="overrideColumns"
-          row-key="id"
-          :pagination="{ rowsPerPage: 10 }"
-        >
-          <template #body-cell-actions="props">
-            <q-td class="text-right">
-              <q-btn flat icon="sym_s_edit" title="Edit" @click="editOverride(props.row)" />
+
+          <!-- Preview panel (T-052) -->
+          <q-card v-if="showPreviewPanel" flat bordered class="q-mb-md">
+            <q-card-section>
+              <div class="text-subtitle1 q-mb-sm">Preview: With Rule vs Without Rule</div>
               <q-btn
-                flat
-                color="negative"
-                icon="sym_s_delete_forever"
-                title="Delete"
-                @click="confirmDeleteOverride(props.row.id)"
-              />
-            </q-td>
-          </template>
-          <template #body-cell-tags="props">
-            <q-td>
-              <q-chip
-                v-for="tag in getOverrideTags(props.row)"
-                :key="tag"
+                :loading="previewLoading"
                 dense
-                size="sm"
+                flat
+                label="Run Preview"
                 color="primary"
-                text-color="white"
-              >
-                {{ tag }}
-              </q-chip>
-            </q-td>
-          </template>
-        </q-table>
-      </q-card>
+                class="q-mb-sm"
+                @click="runPreview"
+              />
+            </q-card-section>
+            <q-card-section v-if="previewWithResults.length > 0 || previewWithoutResults.length > 0">
+              <div class="row q-gutter-md">
+                <!-- With override -->
+                <div class="col">
+                  <div class="text-subtitle2 q-mb-xs">With Rule</div>
+                  <q-list dense separator bordered>
+                    <q-item
+                      v-for="(doc, idx) in previewWithResults"
+                      :key="'pw-' + idx"
+                      :class="previewDiffClass(doc, idx)"
+                    >
+                      <q-item-section>
+                        <q-item-label>
+                          <span class="text-caption text-grey q-mr-xs">#{{ idx + 1 }}</span>
+                          <span class="text-weight-medium">{{ getDocId(doc) }}</span>
+                        </q-item-label>
+                        <q-item-label caption class="ellipsis">{{ getDocSummary(doc) }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
+                </div>
+                <!-- Without override -->
+                <div class="col">
+                  <div class="text-subtitle2 q-mb-xs">Without Rule</div>
+                  <q-list dense separator bordered>
+                    <q-item
+                      v-for="(doc, idx) in previewWithoutResults"
+                      :key="'pwo-' + idx"
+                    >
+                      <q-item-section>
+                        <q-item-label>
+                          <span class="text-caption text-grey q-mr-xs">#{{ idx + 1 }}</span>
+                          <span class="text-weight-medium">{{ getDocId(doc) }}</span>
+                        </q-item-label>
+                        <q-item-label caption class="ellipsis">{{ getDocSummary(doc) }}</q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
+                </div>
+              </div>
+            </q-card-section>
+          </q-card>
+        </template>
+
+        <!-- JSON Editor mode (T-052) -->
+        <template v-else>
+          <q-card flat bordered class="q-mb-md" style="height: 60vh">
+            <monaco-editor v-model="jsonEditorValue" />
+          </q-card>
+          <q-banner v-if="jsonError" inline-actions class="text-white bg-red q-mb-md">
+            Invalid JSON: {{ jsonError }}
+          </q-banner>
+          <div class="row q-gutter-sm q-mb-md">
+            <q-btn
+              flat
+              icon="sym_s_visibility"
+              label="Visual Editor"
+              @click="closeJsonEditor"
+            />
+            <q-btn
+              :loading="saving"
+              unelevated
+              color="primary"
+              label="Save Rule"
+              :disable="!!jsonError || !canSave"
+              @click="saveOverride"
+            />
+            <q-btn flat label="Reset" @click="resetForm" />
+          </div>
+        </template>
+      </template>
     </template>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { nanoid } from 'nanoid';
 import MonacoEditor from 'src/components/MonacoEditor.vue';
+import FilterBuilder from 'src/components/FilterBuilder.vue';
+import SortBuilder from 'src/components/SortBuilder.vue';
+import ProductCard from 'src/components/ProductCard.vue';
 import { useNodeStore } from 'src/stores/node';
+import { generateRuleSlug, getProductDisplayName } from 'src/shared/curations-utils';
 import type { OverrideSchema } from 'typesense/lib/Typesense/Override';
-import type { QTableProps } from 'quasar';
 
 const $q = useQuasar();
 const store = useNodeStore();
@@ -434,6 +461,38 @@ const overrideForm = reactive({
 });
 
 const tags = ref<string[]>([]);
+const showForm = ref(false);
+const isEditingExisting = ref(false);
+const productDetailsCache = ref<Map<string, any>>(new Map());
+
+const collectionFields = computed(() => {
+  return store.currentCollection?.fields || [];
+});
+
+const matchTypeOptions = [
+  { label: 'Exact phrase match', value: 'exact' },
+  { label: 'Contains these words', value: 'contains' },
+];
+
+const ruleName = computed({
+  get: () => {
+    const slug = generateRuleSlug(overrideForm.rule.query);
+    return slug || overrideForm.id;
+  },
+  set: (val: string) => {
+    overrideForm.id = val;
+  },
+});
+
+watch(
+  () => overrideForm.rule.query,
+  (query) => {
+    if (!isEditingExisting.value) {
+      const slug = generateRuleSlug(query);
+      if (slug) overrideForm.id = slug;
+    }
+  },
+);
 
 // Scheduling date helpers
 const effectiveFromStr = computed({
@@ -726,13 +785,13 @@ async function saveOverride() {
     });
     $q.notify({
       type: 'positive',
-      message: `Override "${overrideForm.id}" saved successfully.`,
+      message: `Rule "${ruleName.value}" saved successfully.`,
     });
     refreshOverrides();
   } catch (err) {
     $q.notify({
       type: 'negative',
-      message: `Failed to save override: ${(err as Error).message}`,
+      message: `Failed to save rule: ${(err as Error).message}`,
     });
   } finally {
     saving.value = false;
@@ -740,6 +799,7 @@ async function saveOverride() {
 }
 
 function resetForm() {
+  isEditingExisting.value = false;
   overrideForm.id = nanoid();
   overrideForm.rule.query = '';
   overrideForm.rule.match = 'exact';
@@ -754,21 +814,43 @@ function resetForm() {
   jsonError.value = null;
   previewWithResults.value = [];
   previewWithoutResults.value = [];
+  productDetailsCache.value = new Map();
+}
+
+function openCreateForm() {
+  resetForm();
+  showForm.value = true;
+  showJsonEditor.value = false;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ---- Existing overrides list ----
 
 const listFilter = ref('');
 
-const overrideColumns: QTableProps['columns'] = [
-  { label: 'ID', name: 'id', field: 'id', align: 'left', sortable: true },
-  { label: 'Query', name: 'query', field: (row: any) => row.rule?.query, align: 'left', sortable: true },
-  { label: 'Match', name: 'match', field: (row: any) => row.rule?.match, align: 'left' },
-  { label: 'Includes', name: 'includes', field: (row: any) => row.includes?.length || 0, align: 'center' },
-  { label: 'Excludes', name: 'excludes', field: (row: any) => row.excludes?.length || 0, align: 'center' },
-  { label: 'Tags', name: 'tags', field: () => '', align: 'left' },
-  { label: 'Actions', name: 'actions', field: () => '', align: 'right' },
-];
+
+function getOverrideStatus(row: any): { label: string; color: string } {
+  const from = row.effective_from_ts;
+  const to = row.effective_to_ts;
+  if (!from && !to) return { label: 'Always active', color: 'positive' };
+  const now = Math.floor(Date.now() / 1000);
+  if (to && now > to) return { label: 'Expired', color: 'grey' };
+  if (from && now < from) return { label: 'Scheduled', color: 'info' };
+  return { label: 'Active', color: 'positive' };
+}
+
+function formatProductList(items: any[]): string {
+  if (!items || items.length === 0) return 'None';
+  const fields = collectionFields.value;
+  const names = items.slice(0, 3).map((item: any) => {
+    const cached = productDetailsCache.value.get(String(item.id));
+    if (cached) return getProductDisplayName(cached, fields);
+    return String(item.id);
+  });
+  const display = names.join(', ');
+  if (items.length > 3) return `${display} +${items.length - 3} more`;
+  return display;
+}
 
 function getOverrideTags(override: OverrideSchema): string[] {
   try {
@@ -793,18 +875,65 @@ const filteredOverrides = computed(() => {
   });
 });
 
-function editOverride(override: OverrideSchema) {
+async function editOverride(override: OverrideSchema) {
+  isEditingExisting.value = true;
   overrideForm.id = override.id || nanoid();
   applyPayloadToForm(override);
   searchResults.value = [];
   showJsonEditor.value = false;
+  showForm.value = true;
   window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Fetch product details for pinned/hidden products (T-055)
+  await fetchProductDetails();
+}
+
+async function duplicateOverride(override: OverrideSchema) {
+  isEditingExisting.value = false;
+  overrideForm.id = `copy-of-${override.id || nanoid()}`;
+  applyPayloadToForm(override);
+  searchResults.value = [];
+  showJsonEditor.value = false;
+  showForm.value = true;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Fetch product details for pinned/hidden products
+  await fetchProductDetails();
+}
+
+async function fetchProductDetails() {
+  if (!store.currentCollection) return;
+  const allIds = [
+    ...overrideForm.includes.map((i) => String(i.id)),
+    ...overrideForm.excludes.map((e) => String(e.id)),
+  ];
+  if (allIds.length === 0) return;
+
+  const newCache = new Map<string, any>(productDetailsCache.value);
+  for (const id of allIds) {
+    if (newCache.has(id)) continue;
+    try {
+      const res = await store.search({
+        q: '*',
+        query_by: getQueryByFields(),
+        filter_by: `id:${id}`,
+        per_page: 1,
+      });
+      const hit = res?.hits?.[0];
+      if (hit?.document) {
+        newCache.set(id, hit.document);
+      }
+    } catch {
+      // If fetch fails, card will show raw ID with warning
+    }
+  }
+  productDetailsCache.value = newCache;
 }
 
 function confirmDeleteOverride(id: string) {
   $q.dialog({
     title: 'Confirm',
-    message: `Delete override with id: ${id}?`,
+    message: `Delete rule "${id}"?`,
     cancel: true,
     persistent: true,
   }).onOk(() => {
@@ -828,6 +957,7 @@ onMounted(() => {
   if (queryParam && typeof queryParam === 'string') {
     overrideForm.rule.query = queryParam;
     searchQuery.value = queryParam;
+    showForm.value = true;
     void doSearch();
   }
 });

@@ -22,29 +22,6 @@
         </q-item-section>
       </q-item>
 
-      <!-- Server Section -->
-      <q-expansion-item
-        v-model="sections.server"
-        icon="sym_s_dns"
-        label="Server"
-        header-class="text-weight-bold"
-        dense
-      >
-        <q-item v-ripple clickable to="/" exact dense>
-          <q-item-section avatar>
-            <q-icon name="sym_s_dns" />
-          </q-item-section>
-          <q-item-section>Server Status</q-item-section>
-        </q-item>
-
-        <q-item v-if="!!store.currentClusterTag" v-ripple clickable :to="{ name: 'Clusters' }" dense>
-          <q-item-section avatar>
-            <q-icon name="sym_s_view_column" />
-          </q-item-section>
-          <q-item-section>Cluster Status</q-item-section>
-        </q-item>
-      </q-expansion-item>
-
       <!-- Search Section -->
       <q-expansion-item
         v-model="sections.search"
@@ -82,11 +59,11 @@
         </q-item>
       </q-expansion-item>
 
-      <!-- Merchandising Section -->
+      <!-- Catalog Section -->
       <q-expansion-item
-        v-model="sections.merchandising"
-        icon="sym_s_storefront"
-        label="Merchandising"
+        v-model="sections.catalog"
+        icon="sym_s_category"
+        label="Catalog"
         header-class="text-weight-bold"
         dense
       >
@@ -94,45 +71,22 @@
           <q-item-section avatar>
             <q-icon name="sym_s_sort" />
           </q-item-section>
-          <q-item-section>Product Positioning</q-item-section>
+          <q-item-section>Products</q-item-section>
         </q-item>
 
         <q-item v-ripple clickable to="/merchandising/vendors" exact :disable="!store.isConnected" dense>
           <q-item-section avatar>
             <q-icon name="sym_s_store" />
           </q-item-section>
-          <q-item-section>Vendor Controls</q-item-section>
+          <q-item-section>Vendors</q-item-section>
         </q-item>
       </q-expansion-item>
 
-      <!-- Relevance Section -->
+      <!-- Search & Discovery Section -->
       <q-expansion-item
-        v-model="sections.relevance"
-        icon="sym_s_tune"
-        label="Relevance"
-        header-class="text-weight-bold"
-        dense
-      >
-        <q-item v-ripple clickable to="/relevance/ranking" exact :disable="!store.isConnected" dense>
-          <q-item-section avatar>
-            <q-icon name="sym_s_leaderboard" />
-          </q-item-section>
-          <q-item-section>Ranking Formula</q-item-section>
-        </q-item>
-
-        <q-item v-ripple clickable to="/relevance/weights" exact :disable="!store.isConnected" dense>
-          <q-item-section avatar>
-            <q-icon name="sym_s_balance" />
-          </q-item-section>
-          <q-item-section>Search Weights</q-item-section>
-        </q-item>
-      </q-expansion-item>
-
-      <!-- Curations Section -->
-      <q-expansion-item
-        v-model="sections.curations"
-        icon="sym_s_low_priority"
-        label="Curations"
+        v-model="sections.discovery"
+        icon="sym_s_manage_search"
+        label="Search & Discovery"
         header-class="text-weight-bold"
         dense
       >
@@ -140,7 +94,7 @@
           <q-item-section avatar>
             <q-icon name="sym_s_photo_filter" />
           </q-item-section>
-          <q-item-section>Overrides</q-item-section>
+          <q-item-section>Search Rules</q-item-section>
         </q-item>
 
         <q-item
@@ -168,7 +122,21 @@
           <q-item-section avatar>
             <q-icon name="sym_s_playlist_remove" />
           </q-item-section>
-          <q-item-section>Stopwords</q-item-section>
+          <q-item-section>Ignored Words</q-item-section>
+        </q-item>
+
+        <q-item v-ripple clickable to="/relevance/ranking" exact :disable="!store.isConnected" dense>
+          <q-item-section avatar>
+            <q-icon name="sym_s_leaderboard" />
+          </q-item-section>
+          <q-item-section>Ranking Formula</q-item-section>
+        </q-item>
+
+        <q-item v-ripple clickable to="/relevance/weights" exact :disable="!store.isConnected" dense>
+          <q-item-section avatar>
+            <q-icon name="sym_s_balance" />
+          </q-item-section>
+          <q-item-section>Search Weights</q-item-section>
         </q-item>
       </q-expansion-item>
 
@@ -210,14 +178,28 @@
         </q-item>
       </q-expansion-item>
 
-      <!-- Configuration Section -->
+      <!-- Settings Section -->
       <q-expansion-item
-        v-model="sections.configuration"
+        v-model="sections.settings"
         icon="sym_s_settings"
-        label="Configuration"
+        label="Settings"
         header-class="text-weight-bold"
         dense
       >
+        <q-item v-ripple clickable to="/" exact dense>
+          <q-item-section avatar>
+            <q-icon name="sym_s_dns" />
+          </q-item-section>
+          <q-item-section>Server Status</q-item-section>
+        </q-item>
+
+        <q-item v-if="!!store.currentClusterTag" v-ripple clickable :to="{ name: 'Clusters' }" dense>
+          <q-item-section avatar>
+            <q-icon name="sym_s_view_column" />
+          </q-item-section>
+          <q-item-section>Cluster Status</q-item-section>
+        </q-item>
+
         <q-item v-ripple clickable to="/collections" exact dense>
           <q-item-section avatar>
             <q-icon name="sym_s_grid_view" />
@@ -297,24 +279,22 @@ const store = useNodeStore();
 const route = useRoute();
 
 const sections = reactive({
-  server: false,
   search: false,
-  merchandising: false,
-  relevance: false,
-  curations: false,
+  catalog: false,
+  discovery: false,
   analytics: false,
-  configuration: false,
+  settings: false,
 });
 
 // Route-to-group mapping for auto-expand
 function getGroupForRoute(path: string): keyof typeof sections | null {
-  if (path === '/' || path.startsWith('/clusters')) return 'server';
   if (path.startsWith('/search/') || path.match(/\/collection\/[^/]+\/search$/)) return 'search';
-  if (path.startsWith('/merchandising/')) return 'merchandising';
-  if (path.startsWith('/relevance/')) return 'relevance';
-  if (path.startsWith('/curations/') || path.startsWith('/stopwords') || path.match(/\/collection\/[^/]+\/synonyms$/)) return 'curations';
+  if (path.startsWith('/merchandising/')) return 'catalog';
+  if (path.startsWith('/relevance/') || path.startsWith('/curations/') || path.startsWith('/stopwords') || path.match(/\/collection\/[^/]+\/synonyms$/)) return 'discovery';
   if (path.startsWith('/analytics/')) return 'analytics';
   if (
+    path === '/' ||
+    path.startsWith('/clusters') ||
     path.startsWith('/collections') ||
     path.startsWith('/aliases') ||
     path.startsWith('/apikeys') ||
@@ -322,7 +302,7 @@ function getGroupForRoute(path: string): keyof typeof sections | null {
     path.startsWith('/stemming') ||
     path.match(/\/collection\/[^/]+\/schema$/) ||
     path.match(/\/collection\/[^/]+\/document$/)
-  ) return 'configuration';
+  ) return 'settings';
   return null;
 }
 
