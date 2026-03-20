@@ -1,89 +1,92 @@
-# Work Definition: Unify Search Pages
+# Work Definition: Curations UX Redesign — Round 2
 
 ## Meta
 - **Type:** Feature Change
 - **JIRA:** None
 - **Created:** 2026-03-19
 - **Author:** renato-dransay
+- **Depends on:** Round 1 (archived at `.planning/archive/2026-03-19-curations-ux-redesign/`)
 
 ## Context
-The Typesense Dashboard currently has two separate search interfaces that serve overlapping purposes:
 
-1. **Collection Search** (`/collection/:name/search`) — A developer-oriented search page with two modes: InstantSearch (full UI with facets, sorting, pagination, document actions) and JSON mode (raw parameter editing with Monaco editor, query history). Supports document editing/deletion, result export, stopwords, and max candidates tuning.
+Round 1 delivered terminology changes across all curations pages (Search Rules, Synonyms, Ignored Words), visual filter/sort builders, rich product cards for pinned/hidden items, and sidebar renaming from "Curations" to "Search Merchandising".
 
-2. **Search Preview** (`/search/preview`) — A business-oriented search page with custom controls for vendor filtering, delivery method filtering, pin-aware ranking, and business-driven sort modes (price, rating, popularity). Features a custom facet panel with checkbox UI and occurrence counts.
+This Round 2 addresses the **remaining P0 and P1 items** from the UX audit (`curations-ux-report.md`) — structural layout changes, navigation consolidation, and visual improvements that were deferred as "higher effort" in Round 1.
 
-Having two pages creates confusion about which to use, duplicates maintenance effort, and splits features that would be more powerful combined. The goal is to merge them into a single unified search experience that retains the strengths of both.
+### What Round 1 already delivered:
+- Sidebar renamed: "Curations" -> "Search Merchandising", "Overrides" -> "Search Rules", "Stopwords" -> "Ignored Words"
+- Search Rules: field labels reworded, visual filter/sort builders, rich product cards, auto-generated rule names
+- Synonyms: plain-language form labels, auto-generated IDs, simplified table columns
+- Ignored Words: explanation banner, language dropdown, hidden IDs
+
+### What remains (this initiative):
+The UX report's P0 items #1, #4, #5 and P1 items #8, #10 are still open.
 
 ## Scope
+
 ### In Scope
-- [ ] Merge Search Preview's business-specific features into the Collection Search page (or a new unified page)
-- [ ] Retain InstantSearch mode with facets, sorting, pagination, and document actions
-- [ ] Retain JSON mode with Monaco editor and query history
-- [ ] Incorporate Search Preview's filter context controls (vendor, delivery method)
-- [ ] Incorporate Search Preview's pin-aware ranking toggle
-- [ ] Incorporate Search Preview's business-driven sort modes (price, rating, popularity)
-- [ ] Incorporate Search Preview's custom facet panel with counts
-- [ ] Remove the now-redundant Search Preview page and its route
-- [ ] Update navigation to reflect the unified page
+- [ ] **Navigation consolidation**: Merge 3 overlapping sidebar sections (Merchandising, Relevance, Search Merchandising) into 2 clear sections: "Catalog" and "Search & Discovery". Collapse Server + Configuration into "Settings".
+- [ ] **Search Rules: list-first layout**: Flip the page so existing rules table appears first (above the fold). The creation/edit form opens below or in a dialog when clicking "Create New Rule" or "Edit".
+- [ ] **Search Rules: hide Edit JSON**: Move "Edit JSON" button behind an Advanced/Developer section toggle — not in the page header.
+- [ ] **Search Rules: rule cards in table**: Replace the dense table with summary cards showing rule name, query, pinned product names, status badge, and tags — making rules scannable.
+- [ ] **Synonyms: visual arrow notation**: Replace "Two-way" / "One-way" text in the table with visual `<->` and `->` arrow notation showing the synonym relationship inline.
+- [ ] **Synonyms: inline preview text**: After entering synonyms, show a sentence explaining the effect: "When a customer searches for **X**, they'll also see results for **Y** and **Z**."
+- [ ] **Ignored Words: pre-populated suggestions**: When a language is selected, offer a "Load common words" button with pre-built stopword lists for English, Spanish, French, German, Portuguese.
+- [ ] **Ignored Words: better empty state**: Replace warning triangle with a helpful message and action button.
 
 ### Out of Scope
-- Changes to the Typesense API layer or backend
-- Changes to other dashboard pages (analytics, curations, etc.)
-- New search features not present in either existing page
+- Live split-screen search preview (P2 — requires significant backend interaction)
+- Step-by-step guided rule creation wizard (P2 — deferred)
+- Product Positioning redesign (P1 — separate initiative, different page)
+- Vendor Controls redesign (P2 — separate initiative)
+- Activity log (P2)
+- Onboarding checklist (P2)
+- "Preview as Customer" global mode (P2)
 
 ## Requirements
+
 ### Functional
-1. The system MUST provide a single search page accessible from collection navigation
-2. The system MUST retain the InstantSearch mode with all current capabilities (facets, sorting, pagination, hits-per-page, stopwords, max candidates, result export, document edit/delete)
-3. The system MUST retain the JSON mode with Monaco editor, query history, and raw parameter control
-4. The system MUST detect collection-specific fields and dynamically show relevant business controls (vendor filter, delivery method, pin toggle, business sort modes) only when the collection schema contains the corresponding fields
-5. The system MUST support business filter controls when applicable: vendor context (all vendors, featured only, specific vendor), delivery method filtering
-6. The system MUST support pin-aware ranking toggle (with pins / without pins) when applicable
-7. The system MUST provide a unified sort dropdown that combines business presets (Default, Price, Rating, Popularity) with field-based sort options derived from the collection schema — business presets appear first when applicable fields exist, followed by generic field-based options
-8. The system MUST display facets with occurrence counts and multi-select capability
-9. The system MUST remove the `/search/preview` route and `SearchPreview.vue` page entirely (no redirect needed — local self-hosted app)
-10. The system MUST update the sidebar/navigation to remove the Search Preview link
+
+**Navigation**
+1. The sidebar MUST consolidate into the following structure:
+   - **Search** (existing, unchanged)
+   - **Catalog**: Products (was Product Positioning), Vendors (was Vendor Controls)
+   - **Search & Discovery**: Search Rules, Synonyms, Ignored Words, Ranking (merge Ranking Formula + Search Weights under one label)
+   - **Analytics** (unchanged)
+   - **Settings**: Server Status, Cluster Status, API Keys, Aliases, Search Presets, Stemming, Analytics Rules
+2. All route paths MUST remain unchanged — only labels and grouping change.
+3. The collection selector MUST remain at the top of the sidebar.
+
+**Search Rules — Layout**
+4. The page MUST show the existing rules list FIRST (above the fold) when navigating to the page.
+5. A "Create New Rule" button at the top MUST open/expand the creation form below (or in a dialog/drawer).
+6. Clicking "Edit" on an existing rule MUST populate the creation/edit form with that rule's data (existing behavior, just repositioned).
+7. The "Edit JSON" button MUST be moved out of the page header into an Advanced section within the form, or behind a "Developer tools" expansion.
+
+**Search Rules — Rule Cards**
+8. Each rule in the list MUST display as a summary card showing: Rule Name, trigger query, match type, pinned product names (not IDs), status badge (Active/Scheduled/Expired), and tags.
+9. Each card MUST have Edit, Duplicate, and Delete actions.
+10. The rule cards MUST be filterable by tag (existing functionality, repositioned).
+
+**Synonyms — Table**
+11. The synonym table MUST replace "Two-way" with a visual `<->` indicator and "One-way" with a `->` indicator.
+12. For two-way synonyms, the table MUST show all words connected by `<->` in a single cell, eliminating the empty "Trigger word" column issue.
+13. For one-way synonyms, the table MUST show `trigger -> synonym1, synonym2`.
+
+**Synonyms — Preview**
+14. After entering synonyms in the creation form, a preview sentence MUST appear: "When a customer searches for **[word]**, they'll also see results for **[other words]**."
+15. For two-way synonyms, show: "Searching for any of **[word1]**, **[word2]**, ... will show results for all of them."
+
+**Ignored Words — Suggestions**
+16. When a language is selected in the creation form, a "Load common words" button MUST appear.
+17. Clicking "Load common words" MUST populate the word list with the language's common stopwords.
+18. Pre-built lists MUST exist for: English, Spanish, French, German, Portuguese (at minimum).
+19. The user MUST be able to edit the pre-populated list before saving (it's a suggestion, not auto-save).
+
+**Ignored Words — Empty State**
+20. When no word lists exist, the table area MUST show a friendly empty state with a description and a call-to-action button instead of a warning triangle.
 
 ### Non-Functional
-- Performance: Search response time should not degrade from current behavior
-- Compatibility: Must work with existing Typesense connection configuration
-
-## Acceptance Criteria
-- [ ] AC-001: Given a user navigates to a collection's search page, when the collection has business-relevant fields (vendor, delivery, pins), then business controls appear alongside InstantSearch/JSON modes; when the collection lacks those fields, only the standard search modes are shown
-- [ ] AC-002: Given a user is in InstantSearch mode, when they use facets, sorting, pagination, and document actions, then all features work as they do today
-- [ ] AC-003: Given a user is in JSON mode, when they edit parameters and search, then query history, export, and raw results work as they do today
-- [ ] AC-004: Given a user selects a vendor filter context (all, featured, specific vendor, delivery method), when they search, then results are filtered accordingly
-- [ ] AC-005: Given a user toggles pin-aware ranking, when they search, then sort order reflects the pin configuration
-- [ ] AC-006: Given a user selects a business sort mode (price, rating, popularity), when they search, then results are sorted by that criteria
-- [ ] AC-007: Given the `/search/preview` route, it no longer exists in the router (removed entirely)
-- [ ] AC-008: Given a user opens the sidebar navigation, when they look for search options, then there is a single entry point (no separate "Search Preview" link)
-
-## Dependencies
-- **Blocks:** Nothing
-- **Blocked by:** Nothing
-- **Related:** None
-
-## Technical Hints
-- **Collection Search page:** `src/pages/Search.vue` (container with tabs for InstantSearch/JSON)
-- **Search Preview page:** `src/pages/SearchPreview.vue` (standalone, custom controls)
-- **InstantSearch component:** `src/components/search/SearchInstantSearch.vue`
-- **JSON mode component:** `src/components/search/SearchJson.vue`
-- **Result components:** `src/components/search/SearchResultItem.vue`, `SearchResultItemNestedDisplay.vue`, `SearchResultItemAttribute.vue`
-- **Debounced input:** `src/components/search/DebouncedSearchBox.vue`
-- **Store:** `src/stores/node.ts` (Pinia — collections, search, API access)
-- **API layer:** `src/shared/api.ts` (Typesense client wrapper)
-- **Routes:** `src/router/routes.ts`
-- **Layout/nav:** `src/layouts/MainLayout.vue`
-- Search Preview uses `typesense-instantsearch-adapter` v2.9.0 indirectly via the store; InstantSearch mode uses it directly
-- Search Preview's business sort modes map to specific fields: `min_price:asc`, `avg_rating:desc`, `popularity:desc`, `default_rank_with_pin`/`default_rank`
-- Search Preview's facets are built dynamically from collection schema fields
-
-## Source Documents
-| Document | Type | Location |
-|----------|------|----------|
-| (none) | — | — |
-
-## Open Questions
-1. **UI layout for business controls**: Business controls (vendor, delivery, pins) should live in the product area similar to Search Preview's current layout — left sidebar for facets, top controls for filters. Exact placement within the unified page tabs to be determined during spec.
-2. **Field detection heuristics**: Which exact field names trigger business controls? Need to inspect the products collection schema to define the mapping (e.g., `vendor_ids` → vendor filter, `delivery_method` → delivery filter, `pin_priority`/`default_rank_with_pin` → pin toggle).
+- All existing Typesense API calls MUST remain functionally unchanged.
+- Navigation changes MUST NOT break any existing route paths or bookmarks.
+- The page MUST remain fully functional in both light and dark mode.

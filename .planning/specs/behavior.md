@@ -1,222 +1,182 @@
 ---
-title: Unified Search Page - Behavior & Logic
-connie-publish: true
+title: Curations UX Redesign Round 2 - Behavior & Logic
 ---
 
-# Unified Search Page - Behavior & Logic
-
-> ⚠️ **Generated from Git (MARKETPLACE-DOCS). Do not edit in Confluence. Propose changes via PR.**
+# Curations UX Redesign Round 2 - Behavior & Logic
 
 ## Overview
 
-The Typesense Dashboard currently has two search interfaces: a **Collection Search** page (`/collection/:name/search`) with InstantSearch and JSON modes, and a **Search Preview** page (`/search/preview`) with business-specific controls (vendor filtering, pin-aware ranking, business sort presets, and a custom facet panel). This spec defines how to merge them into a single unified search page that dynamically adapts its controls based on the collection schema.
+Round 2 addresses structural layout changes and navigation consolidation deferred from Round 1. The focus is: (1) consolidating the sidebar from 7 sections into 5 clear user-task-oriented groups, (2) flipping Search Rules to a list-first layout, (3) hiding developer-oriented controls, (4) visual synonym relationship notation, (5) inline preview text for synonyms, (6) pre-populated stopword suggestions, and (7) improved empty states.
 
-The unified page retains the existing two-tab structure (InstantSearch Mode / JSON Mode) and adds a **third tab — Preview Mode** — that provides the business-oriented search experience currently offered by Search Preview. Business controls in Preview Mode appear only when the active collection's schema contains the relevant fields.
+**Key constraint:** All route paths remain unchanged. Only labels, grouping, and page layout change.
 
-## Field Detection Heuristics
+## User Journeys
 
-The system determines which business controls to show by inspecting the active collection's `fields` array. A field is considered **present** if a field with that exact name exists in the schema (regardless of type).
+### UJ-1: Navigate the Consolidated Sidebar
 
-| Field Name | Enables |
-|---|---|
-| `vendor_ids` | Specific vendor filter |
-| `featured_vendor_ids` | Featured vendors filter |
-| `delivery_methods` | Delivery method filter |
-| `min_price` | Price sort preset |
-| `avg_rating` | Rating sort preset |
-| `popularity` | Popularity sort preset |
-| `default_rank_with_pin` | Pin-aware ranking toggle + Default (with pins) sort |
-| `default_rank` | Default (without pins) sort |
-| `is_available` | Availability-first sorting (prepended to default sort) |
-| `pin_priority` | Pin priority badge in result items |
+**Description**: A merchandiser opens the dashboard and finds all features organized in intuitive, non-overlapping groups.
 
-**Composite rule — Preview Mode tab visibility**: The Preview Mode tab is shown when **at least one** of these fields exists: `vendor_ids`, `featured_vendor_ids`, `delivery_methods`, `default_rank_with_pin`, `default_rank`. If none exist, the tab is hidden and the page behaves exactly as today (two tabs: InstantSearch + JSON).
+#### Scenario: Sidebar shows consolidated sections
+- **WHEN** the user logs in and sees the sidebar
+- **THEN** the sidebar shows these top-level sections in order:
+  1. Collection selector (unchanged)
+  2. **Search** — Search, Query Debugger, Autocomplete Preview (unchanged)
+  3. **Catalog** — Products, Vendors
+  4. **Search & Discovery** — Search Rules, Synonyms, Ignored Words, Ranking Formula, Search Weights
+  5. **Analytics** — (unchanged)
+  6. **Settings** — Server Status, Cluster Status, Collections, Aliases, API Keys, Search Presets, Stemming, Schema, Add Document
+- **AND** "Merchandising", "Relevance", and "Search Merchandising" sections no longer exist as separate groups
+- **AND** all route paths (URLs) remain identical
 
-## User Journeys & Testing *(mandatory)*
+#### Scenario: Auto-expand works for new section groupings
+- **WHEN** the user navigates to `/merchandising/products`
+- **THEN** the "Catalog" section auto-expands
+- **WHEN** the user navigates to `/curations/overrides` or `/relevance/ranking`
+- **THEN** the "Search & Discovery" section auto-expands
+- **WHEN** the user navigates to `/` (Server Status)
+- **THEN** the "Settings" section auto-expands
 
-### User Journey 1: Standard Collection Search (no business fields)
+### UJ-2: View and Manage Search Rules (List-First)
 
-**Description**: A user searches a collection that does not have business-specific fields (e.g., a generic collection with only basic text fields). The experience is identical to the current Collection Search page — two tabs, no business controls.
+**Description**: A merchandiser navigates to Search Rules and immediately sees all existing rules above the fold, with a clear action to create a new one.
 
-**Independent Test**: Can be tested by connecting to any Typesense instance and selecting a collection without vendor/pin/price fields. The page should show only InstantSearch and JSON tabs.
+#### Scenario: Page loads with rules list first
+- **WHEN** the user navigates to the Search Rules page
+- **THEN** the page header shows "Search Rules" with a "+ Create New Rule" button
+- **AND** the existing rules are displayed immediately below as summary cards
+- **AND** no creation form is visible until the user clicks "+ Create New Rule"
 
-#### Scenario: Page loads for a generic collection
-- **WHEN** the user navigates to `/collection/:name/search`
-- **AND** the collection schema does NOT contain any of: `vendor_ids`, `featured_vendor_ids`, `delivery_methods`, `default_rank_with_pin`, `default_rank`
-- **THEN** the page shows two tabs: "InstantSearch Mode" and "JSON Mode"
-- **AND** no "Preview Mode" tab is visible
+#### Scenario: Rule cards show summary info
+- **WHEN** the user views the rules list
+- **THEN** each rule is displayed as a card showing:
+  - Rule name (bold)
+  - Trigger: "When someone searches **[query]**" with match type badge
+  - Actions summary: pinned product names, hidden product count, filter/sort overrides
+  - Status badge: Active (green), Scheduled (blue), Expired (gray)
+  - Tags (as chips)
+  - Action buttons: Edit, Duplicate, Delete
 
-#### Scenario: InstantSearch mode works as before
-- **WHEN** the user is on the InstantSearch tab
-- **THEN** they can search, use facets (string, numeric range, boolean), sort by field, paginate, configure hits-per-page, set stopwords, tune max candidates, export results, edit documents, and delete documents
-- **AND** all behavior matches the current `SearchInstantSearch.vue` implementation
+#### Scenario: Creating a new rule
+- **WHEN** the user clicks "+ Create New Rule"
+- **THEN** the creation form expands below the button (above the rules list)
+- **AND** the form contains all the same fields as currently (Rule Name, query, match type, filters, sort, scheduling, pin/hide products)
+- **AND** the "Edit JSON" option is hidden inside an "Advanced" expansion within the form
 
-#### Scenario: JSON mode works as before
-- **WHEN** the user is on the JSON tab
-- **THEN** they can edit search parameters in the Monaco editor, view query history, execute searches, and export results
-- **AND** all behavior matches the current `SearchJson.vue` implementation
+#### Scenario: Editing an existing rule
+- **WHEN** the user clicks "Edit" on a rule card
+- **THEN** the creation form expands and populates with that rule's data (same as current behavior)
 
----
+#### Scenario: Duplicating a rule
+- **WHEN** the user clicks "Duplicate" on a rule card
+- **THEN** the creation form expands with a copy of that rule's data
+- **AND** the Rule Name is set to `copy-of-[original-name]`
+- **AND** the Override ID is cleared (will auto-generate on save)
 
-### User Journey 2: Business Collection Search (with Preview Mode)
+#### Scenario: Edit JSON is hidden from primary UI
+- **WHEN** the user views the Search Rules page
+- **THEN** there is no "Edit JSON" button in the page header
+- **WHEN** the user expands the creation/edit form and opens "Advanced"
+- **THEN** the "Edit JSON" toggle is available within the Advanced section
 
-**Description**: A user searches a collection that has business-specific fields (e.g., a "products" collection with vendor IDs, pricing, ratings, and pin ranking). The Preview Mode tab appears, providing the same business-oriented search experience currently offered by the Search Preview page.
+### UJ-3: Understand Synonym Relationships at a Glance
 
-**Independent Test**: Can be tested by connecting to a Typesense instance with a products collection containing `vendor_ids`, `min_price`, `avg_rating`, `popularity`, `default_rank_with_pin`, and `default_rank` fields. The Preview Mode tab should appear and all business controls should work.
+**Description**: A merchandiser views the synonyms table and immediately understands the relationships without knowing technical terminology.
 
-#### Scenario: Page loads with business fields detected
-- **WHEN** the user navigates to `/collection/:name/search`
-- **AND** the collection schema contains at least one of: `vendor_ids`, `featured_vendor_ids`, `delivery_methods`, `default_rank_with_pin`, `default_rank`
-- **THEN** the page shows three tabs: "InstantSearch Mode", "JSON Mode", and "Preview Mode"
+#### Scenario: Visual arrow notation in table
+- **WHEN** the user views the synonyms table
+- **THEN** two-way synonyms show as: `word1 ↔ word2 ↔ word3` (using ↔ character)
+- **AND** one-way synonyms show as: `trigger → synonym1, synonym2` (using → character)
+- **AND** the "Type" and "Trigger word" columns are replaced by a single "Relationship" column
+- **AND** the table columns are: Relationship, Actions
 
-#### Scenario: Preview Mode layout
-- **WHEN** the user selects the "Preview Mode" tab
-- **THEN** a two-column layout appears:
-  - **Left column (3/12)**: Facet panel with dynamic facets from the collection schema, displayed as checkbox groups with occurrence counts
-  - **Right column (9/12)**: Search input (debounced 300ms), controls row (sort mode, pin toggle, filter context), and results list
+#### Scenario: Inline preview when creating synonyms
+- **WHEN** the user enters words in the synonym creation form
+- **AND** the type is "These words mean the same thing" (two-way)
+- **THEN** a preview appears below: "Searching for any of **word1**, **word2**, **word3** will show results for all of them."
+- **WHEN** the type is "This word should also match..." (one-way)
+- **AND** a trigger word and synonyms are entered
+- **THEN** a preview appears: "When a customer searches for **trigger**, they'll also see results for **synonym1** and **synonym2**."
 
-#### Scenario: Sort mode dropdown (dynamic presets)
-- **WHEN** the user views the sort mode dropdown in Preview Mode
-- **THEN** only sort options whose backing fields exist in the schema are shown:
-  - "Default" — always shown (uses `is_available:desc,default_rank_with_pin:desc` or `is_available:desc,default_rank:desc` depending on pin toggle; falls back to relevance if neither field exists)
-  - "Price" — shown only if `min_price` field exists → sorts by `min_price:asc`
-  - "Rating" — shown only if `avg_rating` field exists → sorts by `avg_rating:desc`
-  - "Popularity" — shown only if `popularity` field exists → sorts by `popularity:desc`
+### UJ-4: Set Up Ignored Words with Pre-built Suggestions
 
-#### Scenario: Pin-aware ranking toggle
-- **WHEN** the collection schema contains `default_rank_with_pin`
-- **THEN** a "With pins / Without pins" toggle is visible in the controls row
-- **AND** when "With pins" is selected and sort mode is "Default", sort_by uses `is_available:desc,default_rank_with_pin:desc`
-- **AND** when "Without pins" is selected and sort mode is "Default", sort_by uses `is_available:desc,default_rank:desc`
+**Description**: A merchandiser setting up ignored words for the first time can quickly load a common set for their language.
 
-#### Scenario: Pin toggle hidden when not applicable
-- **WHEN** the collection schema does NOT contain `default_rank_with_pin`
-- **THEN** the pin toggle is not visible
+#### Scenario: Load common words button
+- **WHEN** the user has a language selected in the creation form
+- **AND** pre-built stopwords exist for that language
+- **THEN** a "Load common words" button appears next to the word input
+- **WHEN** the user clicks "Load common words"
+- **THEN** the word list is populated with common stopwords for that language
+- **AND** the user can add or remove words before saving
 
-#### Scenario: Filter context — All vendors
-- **WHEN** the user selects "All vendors" in the filter context dropdown
-- **THEN** no vendor-related filter is applied to the search
+#### Scenario: Friendly empty state
+- **WHEN** no word lists exist
+- **THEN** instead of a warning triangle, the table area shows:
+  - Headline: "No ignored words yet"
+  - Description: "Most stores benefit from ignoring common words like 'the' and 'and' to improve search relevance."
+  - Action buttons: "Add common English words" and "Create your own list"
+- **WHEN** the user clicks "Add common English words"
+- **THEN** the creation form opens with English selected and common English stopwords pre-populated
+- **WHEN** the user clicks "Create your own list"
+- **THEN** the creation form opens empty
 
-#### Scenario: Filter context — Featured vendors
-- **WHEN** the user selects "Featured vendors"
-- **AND** the collection schema contains `featured_vendor_ids`
-- **THEN** filter_by includes `featured_vendor_ids:!=[]`
+#### Scenario: Languages with pre-built lists
+- **WHEN** the user selects English, Spanish, French, German, or Portuguese
+- **THEN** the "Load common words" button is available
+- **WHEN** the user selects a language without a pre-built list (e.g., "Other...")
+- **THEN** no "Load common words" button appears
 
-#### Scenario: Filter context — Specific vendor
-- **WHEN** the user selects "Specific vendor"
-- **AND** enters a vendor ID
-- **THEN** filter_by includes `vendor_ids:=[<entered_id>]`
+## Functional Requirements
 
-#### Scenario: Filter context — Delivery method
-- **WHEN** the user selects "Delivery method"
-- **AND** enters a delivery method value
-- **THEN** filter_by includes `delivery_methods:=[<entered_value>]`
+### Navigation
+- **FR-001**: Sidebar MUST consolidate into 5 top-level sections: Search, Catalog, Search & Discovery, Analytics, Settings.
+- **FR-002**: "Catalog" section MUST contain: Products (route: `/merchandising/products`), Vendors (route: `/merchandising/vendors`). Icon: `sym_s_category`.
+- **FR-003**: "Search & Discovery" section MUST contain: Search Rules (route: `/curations/overrides`), Synonyms (collection-scoped), Ignored Words (route: `/stopwords`), Ranking Formula (route: `/relevance/ranking`), Search Weights (route: `/relevance/weights`). Icon: `sym_s_manage_search`.
+- **FR-004**: "Settings" section MUST contain: Server Status (route: `/`), Cluster Status, Collections, Aliases, API Keys, Search Presets, Stemming, Schema, Add Document. Icon: `sym_s_settings`.
+- **FR-005**: The `getGroupForRoute()` function MUST be updated to map routes to the new section keys: `catalog`, `discovery`, `settings` (replacing `merchandising`, `relevance`, `curations`, `server`, `configuration`).
+- **FR-006**: All route paths MUST remain unchanged.
 
-#### Scenario: Filter context options are dynamic
-- **WHEN** the collection schema does NOT contain `vendor_ids` and `featured_vendor_ids`
-- **THEN** vendor-related filter context options ("All vendors", "Featured vendors", "Specific vendor") are hidden
-- **AND** if `delivery_methods` is also absent, the filter context dropdown is hidden entirely
+### Search Rules Layout
+- **FR-010**: The Search Rules page MUST show the rules list first, with the creation form collapsed by default.
+- **FR-011**: A "+ Create New Rule" button MUST appear at the top of the page.
+- **FR-012**: The "Edit JSON" button MUST be removed from the page header and placed inside an Advanced expansion within the form.
+- **FR-013**: Each rule in the list MUST be displayed as a summary card with: name, query, match type, pinned product names, status badge, tags, and Edit/Duplicate/Delete actions.
+- **FR-014**: Clicking "Duplicate" MUST copy the rule data into the form with name prefixed `copy-of-` and empty Override ID.
+- **FR-015**: The existing rules table (dense columns) MUST be replaced with the card-based layout.
 
-#### Scenario: Facet panel with counts
-- **WHEN** a search is executed in Preview Mode
-- **AND** the collection has facet-enabled fields
-- **THEN** the left panel displays each facet field as a checkbox group
-- **AND** each option shows the value and occurrence count (e.g., "Electronics (42)")
-- **AND** selecting/deselecting facet values triggers a new search with `filter_by` updated accordingly
+### Synonyms
+- **FR-020**: The synonyms table MUST use a single "Relationship" column replacing "Type", "Trigger word", and "Synonyms" columns.
+- **FR-021**: Two-way synonyms MUST display as `word1 ↔ word2 ↔ word3`.
+- **FR-022**: One-way synonyms MUST display as `trigger → synonym1, synonym2`.
+- **FR-023**: An inline preview MUST appear in the creation form when synonyms are entered.
+- **FR-024**: Two-way preview text: "Searching for any of **word1**, **word2**, ... will show results for all of them."
+- **FR-025**: One-way preview text: "When a customer searches for **trigger**, they'll also see results for **synonym1** and **synonym2**."
 
-#### Scenario: Preview Mode result items
-- **WHEN** search results are displayed in Preview Mode
-- **THEN** each result shows: numbered badge, name/title/id, and conditionally:
-  - Availability badge (if `is_available` field exists)
-  - Price (if `min_price` field exists)
-  - Rating (if `avg_rating` field exists)
-  - Popularity (if `popularity` field exists)
-  - Pin priority (if `pin_priority` field exists)
-  - Text match score and details
-
-#### Scenario: Empty query defaults to wildcard
-- **WHEN** the search input is empty or cleared in Preview Mode
-- **THEN** the query sent to Typesense is `*` (wildcard, matches all documents)
-
----
-
-### User Journey 3: Switching Between Tabs
-
-**Description**: A user switches between InstantSearch, JSON, and Preview modes within the same collection. Each tab maintains its own state independently.
-
-**Independent Test**: Can be tested by searching in one tab, switching to another, performing a different search, then switching back — the first tab's state should be preserved.
-
-#### Scenario: Tab state independence
-- **WHEN** the user searches in Preview Mode with specific filters
-- **AND** switches to InstantSearch Mode
-- **THEN** InstantSearch Mode shows its own independent search state
-- **AND** switching back to Preview Mode restores the previous filters and results
-
-#### Scenario: Collection change resets all tabs
-- **WHEN** the user changes the active collection via the sidebar selector
-- **THEN** all three tabs reset their search state
-- **AND** Preview Mode re-evaluates field detection for the new collection (showing/hiding controls and the tab itself as appropriate)
-
----
-
-### User Journey 4: Search Preview Route Removal
-
-**Description**: The standalone Search Preview page and its route are removed entirely. The sidebar navigation no longer shows a separate "Preview" link under the Search section.
-
-**Independent Test**: Verify that `/search/preview` returns a 404 and the NavMenu no longer renders the Preview link.
-
-#### Scenario: Route removed
-- **WHEN** a user navigates to `/search/preview`
-- **THEN** the 404 page is displayed (existing catch-all route)
-
-#### Scenario: Navigation updated
-- **WHEN** the user views the sidebar navigation under the "Search" expansion section
-- **THEN** there is no "Preview" link
-- **AND** "Query Debugger" and "Autocomplete Preview" remain unchanged
-
----
-
-## Functional Requirements *(mandatory)*
-
-- **FR-001**: System MUST render a third tab ("Preview Mode") on the collection search page when the active collection's schema contains at least one of: `vendor_ids`, `featured_vendor_ids`, `delivery_methods`, `default_rank_with_pin`, `default_rank`.
-- **FR-002**: System MUST hide the Preview Mode tab entirely when none of the triggering fields exist in the collection schema.
-- **FR-003**: System MUST retain the InstantSearch Mode tab with all current capabilities: faceted search (string, numeric range, boolean), field-based sorting, pagination, hits-per-page, stopwords sets, max candidates tuning, current-page export, document editing, and document deletion.
-- **FR-004**: System MUST retain the JSON Mode tab with all current capabilities: Monaco editor, query history (localStorage, max 20 per collection), raw parameter control, JSON validation, and result export.
-- **FR-005**: System MUST display a sort mode dropdown in Preview Mode containing only presets whose backing fields exist in the schema (Default always shown; Price if `min_price`; Rating if `avg_rating`; Popularity if `popularity`).
-- **FR-006**: System MUST display a pin-aware ranking toggle ("With pins" / "Without pins") in Preview Mode when `default_rank_with_pin` exists in the schema.
-- **FR-007**: System MUST display a filter context dropdown in Preview Mode with options dynamically determined by field presence: "All vendors" and "Specific vendor" if `vendor_ids` exists; "Featured vendors" if `featured_vendor_ids` exists; "Delivery method" if `delivery_methods` exists. Hide the dropdown entirely if no filter fields exist.
-- **FR-008**: System MUST display a facet panel in Preview Mode's left column showing checkbox groups with occurrence counts for all facet-enabled fields, re-searching on selection change.
-- **FR-009**: System MUST display result items in Preview Mode with conditional field badges based on schema field presence (availability, price, rating, popularity, pin priority, text match score).
-- **FR-010**: System MUST use `query_by: 'name'` and `per_page: 50` as default search parameters in Preview Mode (matching current SearchPreview behavior).
-- **FR-011**: System MUST remove the `/search/preview` route from `src/router/routes.ts`.
-- **FR-012**: System MUST remove the `SearchPreview.vue` page component.
-- **FR-013**: System MUST remove the "Preview" navigation link from the Search section in `NavMenu.vue`.
-- **FR-014**: System MUST use `keep-alive` on tab panels so that switching tabs preserves each tab's state.
-
-## Key Entities *(mandatory if feature involves data)*
-
-- **Collection Schema Fields**: The `fields` array from a Typesense collection schema. Each field has `name`, `type`, `facet`, `index`, `sort`, and other attributes. Used for field detection heuristics and dynamic control rendering.
-- **Search Parameters**: The `SearchParams` object sent to Typesense: `q`, `query_by`, `sort_by`, `filter_by`, `facet_by`, `per_page`, `page`. Preview Mode constructs these from its UI controls.
-- **Facet Results**: The `facet_counts` array returned by Typesense search responses. Each entry has `field_name` and `counts` (array of `{value, count}`).
-
-## Success Criteria *(mandatory)*
-
-### Measurable Outcomes
-
-- **SC-001**: After unification, there is exactly one search page route per collection (`/collection/:name/search`) — no `/search/preview` route exists.
-- **SC-002**: All InstantSearch Mode features (facets, sorting, pagination, export, edit, delete, stopwords, max candidates) work identically to the current implementation.
-- **SC-003**: All JSON Mode features (Monaco editor, history, export, raw parameters) work identically to the current implementation.
-- **SC-004**: Preview Mode business controls (sort presets, pin toggle, vendor/delivery filters, facet panel) produce the same search API calls as the current SearchPreview page for equivalent user actions.
-- **SC-005**: For collections without business fields, the page looks and behaves identically to the current Collection Search page (no visible changes).
+### Ignored Words
+- **FR-030**: Pre-built stopword lists MUST exist for: English, Spanish, French, German, Portuguese.
+- **FR-031**: A "Load common words" button MUST appear when the selected language has a pre-built list.
+- **FR-032**: Clicking "Load common words" MUST populate the word input but NOT auto-save.
+- **FR-033**: The empty state MUST show a friendly message with "Add common English words" and "Create your own list" action buttons.
+- **FR-034**: "Add common English words" MUST open the form with English selected and pre-populated.
+- **FR-035**: The "Add Set" button label MUST be changed to "Add Word List" to match the section heading.
 
 ## Edge Cases
 
-- What happens when a collection has `default_rank_with_pin` but NOT `default_rank`? → Pin toggle shows, but "Without pins" falls back to relevance-only sorting (no `default_rank` in sort_by).
-- What happens when a collection has `min_price` but not `vendor_ids`? → Price sort preset appears in Preview Mode, but filter context dropdown hides vendor options. Preview Mode tab still shows because the field detection composite rule only requires one field.
-- What happens when the user is on Preview Mode tab and switches to a collection that doesn't have business fields? → The Preview Mode tab disappears and the active tab falls back to "InstantSearch Mode".
-- What happens when facet fields return empty results? → The facet panel shows "No facet data available. Run a search to see facets." (matching current SearchPreview behavior).
-- What happens when the Typesense connection is lost during a Preview Mode search? → An error banner appears below the controls row with the error message (matching current SearchPreview behavior).
+1. **Synonym preview with single word**: If only one word is entered, do not show a preview sentence (need at least 2 words for a synonym relationship to exist).
+2. **Duplicate rule name collision**: When duplicating, if `copy-of-[name]` already exists, append a numeric suffix: `copy-of-[name]-2`.
+3. **Search Rules with no collection**: If no collection is selected, the rules list should still show but with a banner prompting collection selection (existing behavior, preserved).
+4. **Stopwords for unsupported language**: If "Other..." is selected, no "Load common words" button appears. The form works the same as today.
+5. **Empty rules list**: If no rules exist, show a friendly empty state: "No search rules yet. Create a rule to control what products appear for specific searches."
 
-## Open Questions
+## Acceptance Criteria
 
-1. **Preview Mode as default tab**: Should the page default to Preview Mode when business fields are detected, or always default to InstantSearch Mode? Current spec defaults to InstantSearch Mode (preserving existing behavior).
+- **AC-01**: Sidebar shows exactly 5 top-level sections (Search, Catalog, Search & Discovery, Analytics, Settings) with correct children.
+- **AC-02**: All route paths work unchanged; navigation to any page still works.
+- **AC-03**: Search Rules page loads with rules list visible first; creation form is collapsed.
+- **AC-04**: Edit JSON is no longer in the page header; it is inside the form's Advanced section.
+- **AC-05**: Rule cards show name, query, pinned product names, status, tags, and Edit/Duplicate/Delete.
+- **AC-06**: Synonyms table shows `↔` for two-way and `→` for one-way relationships in a single column.
+- **AC-07**: Inline preview text appears when creating/editing synonyms.
+- **AC-08**: "Load common words" button works for English, Spanish, French, German, Portuguese.
+- **AC-09**: Ignored Words empty state shows friendly message with action buttons.
+- **AC-10**: "Add Set" button reads "Add Word List".

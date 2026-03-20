@@ -11,22 +11,35 @@
     >
       <q-card class="bg-surface column">
         <q-card-section>
-          <q-input v-model="state.id" label="ID" filled class="q-mb-md"></q-input>
-          <q-option-group
-            v-model="state.type"
-            filled
-            :options="typeOptions"
-            color="primary"
-            inline
-            class="q-mb-md"
-          />
+          <div class="q-mb-md">
+            <q-list>
+              <q-item
+                v-for="option in typeOptions"
+                :key="option.value"
+                tag="label"
+                clickable
+                :active="state.type === option.value"
+                active-class="bg-blue-1"
+                class="rounded-borders q-mb-xs"
+              >
+                <q-item-section side>
+                  <q-radio v-model="state.type" :val="option.value" color="primary" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>{{ option.label }}</q-item-label>
+                  <q-item-label caption>{{ option.subtitle }}</q-item-label>
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </div>
 
           <q-input
             v-if="state.type === types.ONE_WAY"
             v-model="state.synonym.root"
             filled
             stack-label
-            label="Root"
+            label="Trigger word"
+            hint="When someone searches for this word..."
             class="q-mb-md"
           ></q-input>
 
@@ -40,35 +53,58 @@
             stack-label
             hide-dropdown-icon
             label="Synonyms"
-            hint="Enter a synonym and press enter"
-          >
-          </q-select>
-        </q-card-section>
-        <q-separator />
-        <q-card-section>
-          <div class="text-overline">Optional</div>
-          <q-select
-            v-model="state.synonym.symbols_to_index"
-            filled
-            multiple
-            use-chips
-            use-input
-            new-value-mode="add"
-            stack-label
-            hide-dropdown-icon
-            label="Symbols to Index"
-            hint="Enter a symbol (eg: +, - ) and press enter"
+            :hint="state.type === types.ONE_WAY ? '...also show results for these words' : 'Enter a synonym and press enter'"
           >
           </q-select>
 
-          <q-input
-            v-model="state.synonym.locale"
-            filled
-            stack-label
-            label="Locale"
-            class="q-mb-md"
-            hint="Leave blank to auto-detect"
-          ></q-input>
+          <div
+            v-if="previewText"
+            class="q-mt-sm q-pa-sm text-body2 text-grey-8"
+            style="background: #f5f5f5; border-radius: 4px;"
+            v-html="previewText"
+          ></div>
+        </q-card-section>
+        <q-separator />
+        <q-card-section class="q-pa-none">
+          <q-expansion-item
+            label="Advanced Options"
+            icon="sym_s_tune"
+            header-class="text-overline"
+            dense
+          >
+            <q-card-section>
+              <q-input
+                v-model="state.id"
+                label="ID"
+                filled
+                class="q-mb-md"
+                hint="Leave blank to auto-generate"
+              ></q-input>
+
+              <q-select
+                v-model="state.synonym.symbols_to_index"
+                filled
+                multiple
+                use-chips
+                use-input
+                new-value-mode="add"
+                stack-label
+                hide-dropdown-icon
+                label="Special Characters"
+                hint="Enter a symbol (eg: +, - ) and press enter"
+              >
+              </q-select>
+
+              <q-input
+                v-model="state.synonym.locale"
+                filled
+                stack-label
+                label="Language"
+                class="q-mb-md"
+                hint="Leave blank to auto-detect"
+              ></q-input>
+            </q-card-section>
+          </q-expansion-item>
         </q-card-section>
 
         <q-card-actions align="right" class="bg-primary">
@@ -132,6 +168,16 @@
           @change="handleFileImport"
         />
       </template>
+      <template #body-cell-relationship="props">
+        <q-td :props="props">
+          <span v-if="props.row.root">
+            <strong>{{ props.row.root }}</strong> → {{ props.row.synonyms.join(', ') }}
+          </span>
+          <span v-else>
+            {{ props.row.synonyms.join(' ↔ ') }}
+          </span>
+        </q-td>
+      </template>
       <template #body-cell-actions="props">
         <q-td class="text-right">
           <q-btn flat icon="sym_s_edit" title="Edit" @click="editSynonym(props.row)"></q-btn>
@@ -154,6 +200,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 import { nanoid } from 'nanoid';
+import { generateSynonymSlug } from 'src/shared/curations-utils';
 import FileSaver from 'file-saver';
 import type { SynonymCreateSchema } from 'typesense/lib/Typesense/Synonyms';
 import type { SynonymSchema } from 'typesense/lib/Typesense/Synonym';
@@ -173,11 +220,13 @@ const types = RootTypes;
 
 const typeOptions = [
   {
-    label: 'Multi-way synonyms',
+    label: 'These words mean the same thing',
+    subtitle: 'When someone searches for any of these words, show results for all of them.',
     value: RootTypes.MULTI_WAY,
   },
   {
-    label: 'One-way synonym',
+    label: 'This word should also match...',
+    subtitle: 'Also show results for these alternatives, but not the other way around.',
     value: RootTypes.ONE_WAY,
   },
 ];
@@ -192,47 +241,16 @@ const state = reactive({
     locale: '',
     symbols_to_index: [],
   } as SynonymCreateSchema,
-  id: nanoid(),
+  id: '',
   columns: [
     {
-      label: 'ID',
-      name: 'id',
-      field: 'id',
+      label: 'Relationship',
+      name: 'relationship',
       align: 'left',
-    },
-    {
-      label: 'Type',
-      name: 'type',
-      align: 'left',
-      field: (row: SynonymSchema) => (row.root ? RootTypes.ONE_WAY : RootTypes.MULTI_WAY),
-      sortable: true,
-    },
-    {
-      label: 'Root',
-      name: 'root',
-      field: 'root',
-      align: 'left',
-      sortable: true,
-    },
-    {
-      label: 'Synonyms',
-      name: 'synonyms',
-      field: (row: SynonymSchema) => row.synonyms.join(', '),
-      align: 'left',
-      sortable: true,
-    },
-    {
-      label: 'Symbols to Index',
-      name: 'symbols_to_index',
-      field: (row: SynonymSchema) => row.symbols_to_index?.join(', '),
-      align: 'left',
-      sortable: true,
-    },
-    {
-      label: 'Locale',
-      name: 'locale',
-      field: 'locale',
-      align: 'left',
+      field: (row: SynonymSchema) =>
+        row.root
+          ? `${row.root} → ${row.synonyms.join(', ')}`
+          : row.synonyms.join(' ↔ '),
       sortable: true,
     },
     {
@@ -243,8 +261,23 @@ const state = reactive({
   ] as QTableProps['columns'],
 });
 
-const isValid = computed(() => state.synonym.synonyms.length > 0 && state.id.length > 0);
+const isValid = computed(() => state.synonym.synonyms.length > 0);
 const isUpdate = computed(() => store.data.synonyms.map((s) => s.id).includes(state.id));
+
+const previewText = computed(() => {
+  if (state.type === RootTypes.MULTI_WAY) {
+    if (state.synonym.synonyms.length < 2) return '';
+    const words = state.synonym.synonyms.map((w) => `<strong>${w}</strong>`).join(', ');
+    return `Searching for any of ${words} will show results for all of them.`;
+  } else {
+    const trigger = state.synonym.root?.trim();
+    if (!trigger || state.synonym.synonyms.length < 1) return '';
+    const synonymWords = state.synonym.synonyms.map((w) => `<strong>${w}</strong>`);
+    const last = synonymWords.pop();
+    const joined = synonymWords.length > 0 ? synonymWords.join(', ') + ' and ' + last : last;
+    return `When a customer searches for <strong>${trigger}</strong>, they'll also see results for ${joined}.`;
+  }
+});
 
 async function createSynonym() {
   const synonym: SynonymCreateSchema = {
@@ -261,12 +294,14 @@ async function createSynonym() {
     synonym.symbols_to_index = state.synonym.symbols_to_index;
   }
 
+  const synonymId = isUpdate.value ? state.id : (state.id || generateSynonymSlug(synonym.synonyms));
+
   await store.createSynonym({
-    id: state.id,
+    id: synonymId,
     synonym: synonym,
   });
 
-  state.id = nanoid();
+  state.id = '';
   state.synonym = {
     root: '',
     synonyms: [],
