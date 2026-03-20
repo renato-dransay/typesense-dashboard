@@ -11,18 +11,6 @@
               Configure how products are ranked in search results.
             </div>
           </q-card-section>
-          <q-separator />
-          <q-card-section>
-            <q-select
-              v-model="selectedCollection"
-              :options="collectionOptions"
-              label="Collection"
-              dense
-              outlined
-              style="max-width: 400px;"
-              @update:model-value="onCollectionChange"
-            />
-          </q-card-section>
         </q-card>
 
         <template v-if="selectedCollection">
@@ -376,7 +364,7 @@
           <q-separator />
 
           <q-card-section v-if="!selectedCollection" class="text-grey-6 text-center q-pa-lg">
-            Select a collection to preview ranking.
+            Select a collection from the top bar to preview ranking.
           </q-card-section>
 
           <q-card-section v-else-if="previewLoading" class="text-center q-pa-lg">
@@ -472,7 +460,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue';
+import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { Notify } from 'quasar';
 import { useNodeStore } from 'src/stores/node';
 import type { Api } from 'src/shared/api';
@@ -539,10 +527,7 @@ const SCORE_FIELD = 'weighted_score';
 const store = useNodeStore();
 const PRESET_NAME = 'default_product_ranking';
 
-const selectedCollection = ref<string | null>(null);
-const collectionOptions = computed(() =>
-  store.data.collections.map((c) => c.name),
-);
+const selectedCollection = computed(() => store.currentCollection?.name ?? null);
 
 const schemaFields = ref<SchemaField[]>([]);
 const boolFields = computed(() => schemaFields.value.filter((f) => f.type === 'bool'));
@@ -652,27 +637,6 @@ function ruleDescription(rule: BoostRule): string {
   }
 }
 
-function ruleToFilter(rule: BoostRule): string {
-  switch (rule.condition) {
-    case 'is_true': return `${rule.field}:true`;
-    case 'is_false': return `${rule.field}:false`;
-    case 'newer_than_days': {
-      const days = Number(rule.value) || 0;
-      const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
-      return `${rule.field}:>${cutoff}`;
-    }
-    case 'older_than_days': {
-      const days = Number(rule.value) || 0;
-      const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
-      return `${rule.field}:<${cutoff}`;
-    }
-    case 'above': return `${rule.field}:>${rule.value}`;
-    case 'below': return `${rule.field}:<${rule.value}`;
-    case 'equals': return `${rule.field}:=${rule.value}`;
-    default: return `${rule.field}:true`;
-  }
-}
-
 function isDateField(fieldName: string, fieldType: string): boolean {
   return fieldType === 'int64' && /date|time|created|updated|_at$/i.test(fieldName);
 }
@@ -713,14 +677,6 @@ function removeBoostRule(idx: number) {
 }
 
 const activeBoostRules = computed(() => boostRules.filter((r) => r.boost > 0));
-
-function buildEvalExpression(): string {
-  if (activeBoostRules.value.length === 0) return '';
-  const clauses = activeBoostRules.value.map(
-    (r) => `(${ruleToFilter(r)}):${r.boost}`,
-  );
-  return `_eval([ ${clauses.join(', ')} ]):desc`;
-}
 
 // ---------------------------------------------------------------------------
 // Ranking Factors (numeric fields — slot 3 of 3 via weighted_score)
@@ -795,17 +751,14 @@ function factorPercent(factor: RankingFactor): number {
 const maxPossibleScore = computed(() => activeFactors.value.reduce((sum, f) => sum + f.weight, 0) * 10);
 
 // ---------------------------------------------------------------------------
-// Generated sort_by (3 slots: primary sort, _eval, weighted_score)
+// Generated sort_by (boolean sorts + weighted_score)
 // ---------------------------------------------------------------------------
 const generatedSortBy = computed(() => {
   const parts: string[] = [];
-  // Slot 1: primary sort
   for (const e of sortEntries) parts.push(`${e.name}:${e.direction}`);
-  // Slot 2: boost rules via _eval
-  const evalExpr = buildEvalExpression();
-  if (evalExpr) parts.push(evalExpr);
-  // Slot 3: weighted_score
-  if (activeFactors.value.length > 0) parts.push(`${SCORE_FIELD}:desc`);
+  if (activeFactors.value.length > 0 || activeBoostRules.value.length > 0) {
+    parts.push(`${SCORE_FIELD}:desc`);
+  }
   return parts.join(',');
 });
 
@@ -980,6 +933,7 @@ function resetToDefaults() {
   batchError.value = null;
   if (selectedCollection.value) void onCollectionChange(selectedCollection.value);
 }
+
 
 // ---------------------------------------------------------------------------
 // Preset load / save
@@ -1279,6 +1233,19 @@ async function runBatchUpdate() {
     staleScoreCount.value = 0;
   }
 }
+
+// React to global collection changes (wait until connected)
+watch(
+  () => store.isConnected ? selectedCollection.value : null,
+  (name) => void onCollectionChange(name),
+);
+
+// Load on mount if collection is already selected
+onMounted(() => {
+  if (store.isConnected && selectedCollection.value) {
+    void onCollectionChange(selectedCollection.value);
+  }
+});
 </script>
 
 <style scoped>
