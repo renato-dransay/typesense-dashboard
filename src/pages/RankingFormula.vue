@@ -130,17 +130,14 @@
                       class="col-auto"
                     />
                   </div>
-                  <div class="row items-center q-gutter-sm">
+                  <div class="row items-center no-wrap q-gutter-sm">
                     <span class="text-grey-7 text-weight-medium">Boost</span>
                     <q-slider
                       v-model="rule.boost"
                       :min="1"
                       :max="100"
                       :step="1"
-                      label
-                      :label-value="rule.boost"
-                      style="min-width: 160px; max-width: 200px"
-                      class="col-auto"
+                      class="col"
                       color="amber-8"
                     />
                     <q-input
@@ -148,7 +145,7 @@
                       type="number"
                       dense
                       outlined
-                      style="width: 60px"
+                      style="width: 75px"
                       class="col-auto"
                     />
                   </div>
@@ -198,14 +195,12 @@
                 <q-item-section>
                   <q-item-label class="text-weight-medium">{{ factor.label }}</q-item-label>
                   <q-item-label caption>{{ factor.field }}</q-item-label>
-                  <div class="row items-center no-wrap q-gutter-sm q-mt-xs" style="max-width: 320px">
+                  <div class="row items-center no-wrap q-gutter-sm q-mt-xs">
                     <q-slider
                       v-model="factor.weight"
                       :min="0"
                       :max="100"
                       :step="1"
-                      label
-                      label-always
                       class="col"
                       color="primary"
                     />
@@ -214,7 +209,7 @@
                       type="number"
                       dense
                       outlined
-                      style="width: 60px"
+                      style="width: 75px"
                       :min="0"
                       :max="100"
                     />
