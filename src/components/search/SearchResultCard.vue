@@ -105,7 +105,7 @@ const props = defineProps<{
   isPinned: boolean;
   isHidden: boolean;
   isSelected: boolean;
-  pinPosition?: number;
+  pinPosition?: number | undefined;
 }>();
 
 const emit = defineEmits<{
