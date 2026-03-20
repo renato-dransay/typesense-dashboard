@@ -82,10 +82,10 @@
           <!-- ===================== PROMOTION RULES ===================== -->
           <q-card flat bordered class="q-mb-md">
             <q-card-section>
-              <div class="text-subtitle1 text-weight-bold">Promotion Rules</div>
+              <div class="text-subtitle1 text-weight-bold">Boost Rules</div>
               <div class="text-caption text-grey-7">
-                Automatically promote products that match these conditions.
-                Higher priority = shown first.
+                Boost products that match these conditions.
+                Higher boost = more impact on ranking. 1 = subtle nudge, 100 = strong push.
               </div>
             </q-card-section>
 
@@ -131,11 +131,11 @@
                     />
                   </div>
                   <div class="row items-center q-gutter-sm">
-                    <span class="text-grey-7 text-weight-medium">Priority level</span>
+                    <span class="text-grey-7 text-weight-medium">Boost</span>
                     <q-slider
                       v-model="rule.boost"
                       :min="1"
-                      :max="10"
+                      :max="100"
                       :step="1"
                       label
                       :label-value="rule.boost"
@@ -441,7 +441,8 @@
             </template>
           </div>
           <p v-if="activeBoostRules.length > 0" class="q-mt-sm q-mb-none">
-            Promotion rules ({{ activeBoostRules.length }}) are applied at search time and don't need recalculation.
+            Boost rules ({{ activeBoostRules.length }}) are included in the recalculation.
+            Time-based rules may become stale between recalculations.
           </p>
           <p class="text-negative q-mt-sm q-mb-none">This cannot be undone automatically.</p>
         </q-card-section>
@@ -619,13 +620,13 @@ function valueLabel(fieldName: string, condition: string): string {
 function ruleDescription(rule: BoostRule): string {
   const fieldLabel = friendlyFactorLabel(rule.field);
   switch (rule.condition) {
-    case 'is_true': return `${fieldLabel} products get priority level ${rule.boost}`;
-    case 'is_false': return `Non-${fieldLabel.toLowerCase()} products get priority level ${rule.boost}`;
-    case 'newer_than_days': return `Products added in the last ${rule.value} days get priority level ${rule.boost}`;
-    case 'older_than_days': return `Products older than ${rule.value} days get priority level ${rule.boost}`;
-    case 'above': return `Products where ${fieldLabel} > ${rule.value} get priority level ${rule.boost}`;
-    case 'below': return `Products where ${fieldLabel} < ${rule.value} get priority level ${rule.boost}`;
-    case 'equals': return `Products where ${fieldLabel} = ${rule.value} get priority level ${rule.boost}`;
+    case 'is_true': return `${fieldLabel} products get +${rule.boost} boost`;
+    case 'is_false': return `Non-${fieldLabel.toLowerCase()} products get +${rule.boost} boost`;
+    case 'newer_than_days': return `Products added in the last ${rule.value} days get +${rule.boost} boost`;
+    case 'older_than_days': return `Products older than ${rule.value} days get +${rule.boost} boost`;
+    case 'above': return `Products where ${fieldLabel} > ${rule.value} get +${rule.boost} boost`;
+    case 'below': return `Products where ${fieldLabel} < ${rule.value} get +${rule.boost} boost`;
+    case 'equals': return `Products where ${fieldLabel} = ${rule.value} get +${rule.boost} boost`;
     default: return '';
   }
 }
@@ -661,7 +662,7 @@ function addBoostRule() {
     field: defaultField,
     condition,
     value: defaultValueForCondition(condition),
-    boost: 5,
+    boost: 30,
   });
 }
 
@@ -891,11 +892,11 @@ async function onCollectionChange(name: string | null) {
     // Default boost rules
     const featured = boolFields.value.find((b) => b.name === 'is_featured');
     if (featured) {
-      boostRules.push({ id: `r${++ruleIdSeq}`, field: 'is_featured', condition: 'is_true', value: '', boost: 7 });
+      boostRules.push({ id: `r${++ruleIdSeq}`, field: 'is_featured', condition: 'is_true', value: '', boost: 40 });
     }
     const createdAt = schemaFields.value.find((f) => f.name === 'created_at');
     if (createdAt) {
-      boostRules.push({ id: `r${++ruleIdSeq}`, field: 'created_at', condition: 'newer_than_days', value: '30', boost: 3 });
+      boostRules.push({ id: `r${++ruleIdSeq}`, field: 'created_at', condition: 'newer_than_days', value: '30', boost: 20 });
     }
 
     // Default ranking factors
@@ -962,8 +963,7 @@ async function checkStaleScores() {
 }
 
 function migrateBoostValue(boost: number): number {
-  if (boost <= 10) return boost;
-  return Math.min(10, Math.max(1, Math.round(boost / 1000)));
+  return Math.min(100, Math.max(1, Math.round(boost)));
 }
 
 async function loadExistingPreset() {
