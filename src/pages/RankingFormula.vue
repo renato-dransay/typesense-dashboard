@@ -575,7 +575,7 @@ const boolFields = computed(() => schemaFields.value.filter((f) => f.type === 'b
 const numericFields = computed(() => schemaFields.value.filter((f) => NUMERIC_TYPES.has(f.type)));
 
 // ---------------------------------------------------------------------------
-// Sort Order (1 primary boolean sort — slot 1 of 3)
+// Sort Order (primary boolean sort)
 // ---------------------------------------------------------------------------
 const sortEntries = reactive<SortEntry[]>([]);
 const sortToAdd = ref<SelectOption | null>(null);
@@ -614,7 +614,7 @@ function removeSortEntry(idx: number) {
 }
 
 // ---------------------------------------------------------------------------
-// Boost Rules (_eval conditions — slot 2 of 3)
+// Boost Rules (additive score conditions)
 // ---------------------------------------------------------------------------
 const boostRules = reactive<BoostRule[]>([]);
 let ruleIdSeq = 0;
@@ -720,7 +720,7 @@ function removeBoostRule(idx: number) {
 const activeBoostRules = computed(() => boostRules.filter((r) => r.boost > 0));
 
 // ---------------------------------------------------------------------------
-// Ranking Factors (numeric fields — slot 3 of 3 via weighted_score)
+// Ranking Factors (numeric fields, written to weighted_score)
 // ---------------------------------------------------------------------------
 const rankingFactors = reactive<RankingFactor[]>([]);
 const factorToAdd = ref<SelectOption | null>(null);
