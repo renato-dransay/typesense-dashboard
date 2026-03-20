@@ -429,7 +429,14 @@ import FilterBuilder from 'src/components/FilterBuilder.vue';
 import SortBuilder from 'src/components/SortBuilder.vue';
 import ProductCard from 'src/components/ProductCard.vue';
 import { useNodeStore } from 'src/stores/node';
-import { generateRuleSlug, getProductDisplayName } from 'src/shared/curations-utils';
+import {
+  generateRuleSlug,
+  getProductDisplayName,
+  buildOverridePayload,
+  applyPayloadToForm,
+  type IncludeItem,
+  type ExcludeItem,
+} from 'src/shared/curations-utils';
 import type { OverrideSchema } from 'typesense/lib/Typesense/Override';
 
 const $q = useQuasar();
@@ -437,14 +444,6 @@ const store = useNodeStore();
 const route = useRoute();
 
 // ---- Form state ----
-
-interface IncludeItem {
-  id: string;
-  position: number;
-}
-interface ExcludeItem {
-  id: string;
-}
 
 const overrideForm = reactive({
   id: nanoid(),
@@ -533,54 +532,19 @@ const pinPositions = ref<number[]>([]);
 const showJsonEditor = ref(false);
 const jsonError = ref<string | null>(null);
 
-function buildOverridePayload(): any {
-  const payload: any = {
-    rule: { ...overrideForm.rule },
-  };
-  if (overrideForm.includes.length > 0) {
-    payload.includes = overrideForm.includes.map((i) => ({ id: String(i.id), position: i.position }));
-  }
-  if (overrideForm.excludes.length > 0) {
-    payload.excludes = overrideForm.excludes.map((e) => ({ id: String(e.id) }));
-  }
-  if (overrideForm.filter_by) {
-    payload.filter_by = overrideForm.filter_by;
-  }
-  if (overrideForm.sort_by) {
-    payload.sort_by = overrideForm.sort_by;
-  }
-  if (overrideForm.effective_from_ts) {
-    payload.effective_from_ts = overrideForm.effective_from_ts;
-  }
-  if (overrideForm.effective_to_ts) {
-    payload.effective_to_ts = overrideForm.effective_to_ts;
-  }
-  if (tags.value.length > 0) {
-    payload.metadata = { tags: tags.value };
-  }
-  return payload;
+function buildPayload(): any {
+  return buildOverridePayload(overrideForm, tags.value);
 }
 
-function applyPayloadToForm(payload: any) {
-  overrideForm.rule.query = payload.rule?.query || '';
-  overrideForm.rule.match = payload.rule?.match || 'exact';
-  overrideForm.includes = (payload.includes || []).map((i: { id: string; position: number }) => ({
-    id: String(i.id),
-    position: Number(i.position),
-  }));
-  overrideForm.excludes = (payload.excludes || []).map((e: { id: string }) => ({
-    id: String(e.id),
-  }));
-  overrideForm.filter_by = payload.filter_by || '';
-  overrideForm.sort_by = payload.sort_by || '';
-  overrideForm.effective_from_ts = payload.effective_from_ts || undefined;
-  overrideForm.effective_to_ts = payload.effective_to_ts || undefined;
-  tags.value = payload.metadata?.tags || [];
+function applyPayload(payload: any) {
+  const result = applyPayloadToForm(payload);
+  Object.assign(overrideForm, result.form);
+  tags.value = result.tags;
 }
 
 const jsonEditorValue = computed({
   get: () => {
-    const payload = buildOverridePayload();
+    const payload = buildPayload();
     payload.id = overrideForm.id;
     return JSON.stringify(payload, null, 2);
   },
@@ -591,7 +555,7 @@ const jsonEditorValue = computed({
       if (parsed.id) {
         overrideForm.id = parsed.id;
       }
-      applyPayloadToForm(parsed);
+      applyPayload(parsed);
     } catch (e) {
       jsonError.value = (e as Error).message;
     }
@@ -778,7 +742,7 @@ async function saveOverride() {
   if (!store.currentCollection || !canSave.value) return;
   saving.value = true;
   try {
-    const payload = buildOverridePayload();
+    const payload = buildPayload();
     await store.createOverride({
       id: overrideForm.id,
       override: payload,
@@ -878,7 +842,7 @@ const filteredOverrides = computed(() => {
 async function editOverride(override: OverrideSchema) {
   isEditingExisting.value = true;
   overrideForm.id = override.id || nanoid();
-  applyPayloadToForm(override);
+  applyPayload(override);
   searchResults.value = [];
   showJsonEditor.value = false;
   showForm.value = true;
@@ -891,7 +855,7 @@ async function editOverride(override: OverrideSchema) {
 async function duplicateOverride(override: OverrideSchema) {
   isEditingExisting.value = false;
   overrideForm.id = `copy-of-${override.id || nanoid()}`;
-  applyPayloadToForm(override);
+  applyPayload(override);
   searchResults.value = [];
   showJsonEditor.value = false;
   showForm.value = true;

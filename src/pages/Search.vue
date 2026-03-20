@@ -1,7 +1,7 @@
 <template>
   <q-page padding>
     <q-tabs v-model="tab" dense class="bg-primary text-white" align="justify" narrow-indicator>
-      <q-tab name="form" label="InstantSearch Mode" />
+      <q-tab name="form" label="Search" />
       <q-tab name="json" label="JSON Mode" />
       <q-tab v-if="showPreviewMode" name="preview" label="Preview Mode" />
     </q-tabs>
@@ -10,7 +10,7 @@
 
     <q-tab-panels v-model="tab" animated keep-alive>
       <q-tab-panel name="form">
-        <search-instant-search />
+        <search-custom v-bind="ruleId !== undefined ? { ruleId } : {}" />
       </q-tab-panel>
       <q-tab-panel name="json" class="q-pa-none">
         <search-json />
@@ -24,13 +24,20 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useNodeStore } from 'src/stores/node';
 import SearchJson from 'src/components/search/SearchJson.vue';
-import SearchInstantSearch from 'src/components/search/SearchInstantSearch.vue';
+import SearchCustom from 'src/components/search/SearchCustom.vue';
 import SearchPreviewMode from 'src/components/search/SearchPreviewMode.vue';
 
 const store = useNodeStore();
+const route = useRoute();
 const tab = ref('form');
+
+const ruleId = computed(() => {
+  const id = route.query.ruleId;
+  return typeof id === 'string' ? id : undefined;
+});
 
 const PREVIEW_TRIGGER_FIELDS = ['vendor_ids', 'featured_vendor_ids', 'delivery_methods', 'default_rank_with_pin', 'default_rank'];
 
@@ -40,52 +47,9 @@ const showPreviewMode = computed(() => {
   return (fields as any[]).some((f: any) => PREVIEW_TRIGGER_FIELDS.includes(f.name));
 });
 
-// If the user is on Preview tab and switches to a collection without business fields, fall back to InstantSearch
 watch(showPreviewMode, (show) => {
   if (!show && tab.value === 'preview') {
     tab.value = 'form';
   }
 });
 </script>
-<style>
-.ais-Hits-item,
-.ais-InfiniteHits-item,
-.ais-InfiniteResults-item,
-.ais-Results-item {
-  border-radius: 4px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.ais-Hits-item .text-body2 [class^='ais-'] {
-  font-size: 0.875rem !important;
-}
-
-@media (max-width: 1979px) {
-  .ais-Hits-item,
-  .ais-InfiniteHits-item,
-  .ais-InfiniteResults-item,
-  .ais-Results-item {
-    width: calc(33% - 1rem);
-  }
-}
-
-@media (max-width: 1023px) {
-  .ais-Hits-item,
-  .ais-InfiniteHits-item,
-  .ais-InfiniteResults-item,
-  .ais-Results-item {
-    width: calc(50% - 1rem);
-  }
-}
-
-@media (max-width: 599px) {
-  .ais-Hits-item,
-  .ais-InfiniteHits-item,
-  .ais-InfiniteResults-item,
-  .ais-Results-item {
-    width: calc(100% - 1rem);
-  }
-}
-</style>
