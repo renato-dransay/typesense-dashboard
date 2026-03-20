@@ -173,7 +173,7 @@
               <div class="text-subtitle1 text-weight-bold">What Matters Most</div>
               <div class="text-caption text-grey-7">
                 Choose which product attributes influence ranking and how much each one matters.
-                Requires "Recalculate" to take effect.
+                Requires "Recalculate" to take effect (boost rules are also included).
               </div>
             </q-card-section>
 
@@ -260,7 +260,7 @@
 
           <!-- ===================== FORMULA & ACTIONS ===================== -->
           <q-card flat bordered class="q-mb-md">
-            <q-card-section v-if="rankingFactors.length > 0">
+            <q-card-section v-if="rankingFactors.length > 0 || activeBoostRules.length > 0">
               <div class="text-subtitle2 text-grey-8 q-mb-sm">How your score is calculated</div>
               <div class="q-pa-sm bg-grey-2 rounded-borders formula-box">
                 <span class="text-weight-bold">Score</span> =
@@ -269,10 +269,15 @@
                   <span class="text-weight-bold text-primary">{{ factorPercent(factor) }}%</span>
                   <span class="q-ml-xs">{{ factor.label }}</span>
                 </template>
+                <template v-for="rule in activeBoostRules" :key="rule.id">
+                  <span class="text-grey-6"> + </span>
+                  <span class="text-weight-bold text-amber-8">+{{ rule.boost }}</span>
+                  <span class="q-ml-xs text-caption">{{ friendlyFactorLabel(rule.field) }}</span>
+                </template>
               </div>
             </q-card-section>
 
-            <q-separator v-if="rankingFactors.length > 0" />
+            <q-separator v-if="rankingFactors.length > 0 || activeBoostRules.length > 0" />
 
             <q-card-section>
               <div class="row items-center q-gutter-sm">
@@ -291,7 +296,7 @@
                   label="Recalculate All Scores"
                   color="negative"
                   icon="sym_s_published_with_changes"
-                  :disable="rankingFactors.length === 0"
+                  :disable="rankingFactors.length === 0 && activeBoostRules.length === 0"
                   @click="confirmApply"
                 />
               </div>
@@ -438,6 +443,11 @@
               <span v-if="idx > 0" class="text-grey-6"> + </span>
               <span class="text-weight-bold text-primary">{{ factorPercent(factor) }}%</span>
               <span class="q-ml-xs">{{ factor.label }}</span>
+            </template>
+            <template v-for="rule in activeBoostRules" :key="rule.id">
+              <span class="text-grey-6"> + </span>
+              <span class="text-weight-bold text-amber-8">+{{ rule.boost }}</span>
+              <span class="q-ml-xs text-caption">{{ friendlyFactorLabel(rule.field) }}</span>
             </template>
           </div>
           <p v-if="activeBoostRules.length > 0" class="q-mt-sm q-mb-none">
