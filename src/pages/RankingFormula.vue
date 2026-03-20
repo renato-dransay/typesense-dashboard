@@ -503,13 +503,50 @@ interface SelectOption {
   type?: string;
 }
 
-interface FieldStats {
-  min: number;
-  max: number;
-  useLog: boolean;
+// Percentile rank maps: field name → (value → percentile 0.0-1.0)
+const percentileRanks = ref<Record<string, Map<number, number>>>({});
+
+function computePercentileRanks(values: number[]): Map<number, number> {
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  if (n <= 1) {
+    const map = new Map<number, number>();
+    if (n === 1) map.set(sorted[0] as number, 0.5);
+    return map;
+  }
+  const map = new Map<number, number>();
+  for (let i = 0; i < n; i++) {
+    const v = sorted[i] as number;
+    if (!map.has(v)) {
+      map.set(v, i / (n - 1));
+    }
+  }
+  return map;
 }
 
-const fieldStats = ref<Record<string, FieldStats>>({});
+function percentileRank(field: string, value: number): number {
+  const map = percentileRanks.value[field];
+  if (!map || map.size === 0) return 0;
+  const exact = map.get(value);
+  if (exact !== undefined) return exact;
+  // Interpolate: find nearest lower and upper
+  let lower = 0;
+  let upper = 1;
+  for (const [v, pct] of map) {
+    if (v <= value && pct >= lower) lower = pct;
+    if (v >= value && pct <= upper) upper = pct;
+  }
+  return (lower + upper) / 2;
+}
+
+function computePreviewPercentiles(docs: Record<string, unknown>[], fields: string[]) {
+  const result: Record<string, Map<number, number>> = {};
+  for (const field of fields) {
+    const values = docs.map(d => Number(d[field] ?? 0));
+    result[field] = computePercentileRanks(values);
+  }
+  percentileRanks.value = { ...percentileRanks.value, ...result };
+}
 
 const SORTABLE_TYPES = new Set(['int32', 'int64', 'float', 'bool']);
 const NUMERIC_TYPES = new Set(['int32', 'int64', 'float']);
@@ -707,21 +744,12 @@ function addRankingFactor() {
     label: factorToAdd.value.label,
     weight: 50,
   });
-  const newField = factorToAdd.value.value;
   factorToAdd.value = null;
-  if (selectedCollection.value) {
-    void fetchFieldStats(selectedCollection.value, [newField]).then(() => recomputePreview());
-  }
+  if (selectedCollection.value) void fetchPreview();
 }
 
 function removeRankingFactor(idx: number) {
-  const removed = rankingFactors[idx];
   rankingFactors.splice(idx, 1);
-  if (removed) {
-    const next = { ...fieldStats.value };
-    delete next[removed.field];
-    fieldStats.value = next;
-  }
 }
 
 function onFactorDragStart(idx: number, e: DragEvent) {
@@ -767,12 +795,10 @@ function computeScore(doc: Record<string, unknown>): { score: number; breakdown:
   let score = 0;
   const breakdown: string[] = [];
 
-  // Ranking factors (normalized)
   for (const f of activeFactors.value) {
     const raw = Number(doc[f.field] ?? 0);
-    const stats = fieldStats.value[f.field];
-    const normalized = stats ? normalizeValue(raw, stats) : 0;
-    const contribution = Math.round(normalized * f.weight);
+    const pct = percentileRank(f.field, raw);
+    const contribution = Math.round(pct * f.weight);
     score += contribution;
     breakdown.push(`${friendlyFactorLabel(f.field)} ${contribution}/${f.weight}`);
   }
@@ -810,46 +836,6 @@ function ruleMatches(rule: BoostRule, doc: Record<string, unknown>): boolean {
   }
 }
 
-async function fetchFieldStats(collectionName: string, fields: string[]) {
-  const api = store.api as Api;
-  const stats: Record<string, FieldStats> = {};
-
-  for (const fieldName of fields) {
-    try {
-      const [minRes, maxRes] = await Promise.all([
-        api.search(collectionName, {
-          q: '*', query_by: 'name',
-          sort_by: `${fieldName}:asc`, per_page: 1, page: 1,
-          include_fields: fieldName,
-        } as any),
-        api.search(collectionName, {
-          q: '*', query_by: 'name',
-          sort_by: `${fieldName}:desc`, per_page: 1, page: 1,
-          include_fields: fieldName,
-        } as any),
-      ]);
-
-      const minVal = Number((minRes?.hits?.[0]?.document as Record<string, unknown>)?.[fieldName] ?? 0);
-      const maxVal = Number((maxRes?.hits?.[0]?.document as Record<string, unknown>)?.[fieldName] ?? 0);
-      const useLog = maxVal / (minVal + 1) > 100;
-
-      stats[fieldName] = { min: minVal, max: maxVal, useLog };
-    } catch {
-      stats[fieldName] = { min: 0, max: 0, useLog: false };
-    }
-  }
-
-  fieldStats.value = { ...fieldStats.value, ...stats };
-}
-
-function normalizeValue(value: number, stats: FieldStats): number {
-  if (stats.min === stats.max) return 0;
-  const clamped = Math.max(stats.min, Math.min(stats.max, value));
-  if (stats.useLog) {
-    return Math.log(1 + clamped - stats.min) / Math.log(1 + stats.max - stats.min);
-  }
-  return (clamped - stats.min) / (stats.max - stats.min);
-}
 
 // ---------------------------------------------------------------------------
 // Schema loading
@@ -875,7 +861,7 @@ async function onCollectionChange(name: string | null) {
   presetNote.value = '';
   batchDone.value = false;
   batchError.value = null;
-  fieldStats.value = {};
+  percentileRanks.value = {};
 
   if (!name) return;
 
@@ -917,10 +903,6 @@ async function onCollectionChange(name: string | null) {
     }
   }
 
-  const factorFields = rankingFactors.map((f) => f.field);
-  if (factorFields.length > 0) {
-    await fetchFieldStats(name, factorFields);
-  }
   void fetchPreview();
 }
 
@@ -1063,6 +1045,8 @@ async function fetchPreview() {
     } as any);
 
     rawDocs = (result?.hits ?? []).map((h: any) => h.document ?? {});
+    const factorFields = activeFactors.value.map((f) => f.field);
+    if (factorFields.length > 0) computePreviewPercentiles(rawDocs, factorFields);
     recomputePreview();
   } catch (err: any) {
     previewError.value = err.message ?? 'Failed';
@@ -1149,10 +1133,12 @@ async function runBatchUpdate() {
   batchCancelled = false;
 
   const factorFields = activeFactors.value.map((f) => f.field);
-  const includeFields = ['id', ...factorFields].join(',');
+  const boostFields = activeBoostRules.value.map((r) => r.field);
+  const allNeededFields = [...new Set([...factorFields, ...boostFields])];
+  const includeFields = ['id', ...allNeededFields].join(',');
 
   try {
-    // Ensure the weighted_score field exists on the collection
+    // Ensure the weighted_score field exists
     const collection = store.data.collections.find((c) => c.name === collectionName);
     const hasScoreField = (collection?.fields as any[])?.some((f: any) => f.name === SCORE_FIELD);
     if (!hasScoreField) {
@@ -1160,7 +1146,6 @@ async function runBatchUpdate() {
         await store.api?.updateCollection(collectionName, {
           fields: [{ name: SCORE_FIELD, type: 'int64', optional: true }],
         } as any);
-        // Refresh collections so schema is up to date
         await store.getCollections();
       } catch (err: any) {
         batchError.value = `Failed to create "${SCORE_FIELD}" field: ${err.message ?? err}`;
@@ -1169,15 +1154,50 @@ async function runBatchUpdate() {
       }
     }
 
-    // Pass 1: Fetch min/max stats for all ranking factor fields
-    await fetchFieldStats(collectionName, factorFields);
-
     const countResult = await api.search(collectionName, { q: '*', query_by: 'name', per_page: 0, page: 1 });
     const totalDocs = countResult?.found ?? 0;
     if (totalDocs === 0) { batchRunning.value = false; batchDone.value = true; return; }
 
-    batchTotal.value = Math.ceil(totalDocs / BATCH_SIZE);
+    const totalPages = Math.ceil(totalDocs / BATCH_SIZE);
+
+    // Pass 1: Collect field values for percentile computation
+    batchTotal.value = totalPages;
+    const allFieldValues: Record<string, number[]> = {};
+    for (const field of factorFields) allFieldValues[field] = [];
+
     let page = 1;
+    let fetched = 0;
+    while (fetched < totalDocs) {
+      if (batchCancelled) break;
+      const res = await api.search(collectionName, {
+        q: '*', query_by: 'name',
+        per_page: BATCH_SIZE, page,
+        include_fields: includeFields,
+      });
+      const hits = res?.hits ?? [];
+      if (hits.length === 0) break;
+      for (const hit of hits) {
+        const doc = hit.document as Record<string, unknown>;
+        for (const field of factorFields) {
+          allFieldValues[field]?.push(Number(doc[field] ?? 0));
+        }
+      }
+      fetched += hits.length;
+      batchCurrent.value += 1;
+      page += 1;
+    }
+
+    // Build percentile maps
+    const pctMaps: Record<string, Map<number, number>> = {};
+    for (const field of factorFields) {
+      pctMaps[field] = computePercentileRanks(allFieldValues[field] ?? []);
+    }
+    percentileRanks.value = pctMaps;
+
+    // Pass 2: Compute and write scores
+    batchCurrent.value = 0;
+    batchTotal.value = totalPages;
+    page = 1;
     let processed = 0;
 
     while (processed < totalDocs) {
