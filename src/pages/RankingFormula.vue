@@ -392,11 +392,6 @@
                   <q-item-label class="text-weight-medium ellipsis" style="font-size: 0.85rem">
                     {{ p.title }}
                   </q-item-label>
-                  <q-item-label v-if="p.tierLevel > 0" caption>
-                    <q-badge color="amber-8" text-color="white" class="q-mr-xs">
-                      ★ {{ p.tierLabel }} (priority {{ p.tierLevel }})
-                    </q-badge>
-                  </q-item-label>
                   <q-item-label caption>
                     <span class="text-primary text-weight-bold">Score: {{ p.score }} / {{ maxPossibleScore }}</span>
                   </q-item-label>
@@ -498,8 +493,6 @@ interface PreviewProduct {
   id: string;
   title: string;
   score: number;
-  tierLevel: number;
-  tierLabel: string;
   breakdown: string[];
 }
 
@@ -748,7 +741,11 @@ function factorPercent(factor: RankingFactor): number {
   return total > 0 ? Math.round((factor.weight / total) * 100) : 0;
 }
 
-const maxPossibleScore = computed(() => activeFactors.value.reduce((sum, f) => sum + f.weight, 0) * 10);
+const maxPossibleScore = computed(() => {
+  const factorMax = activeFactors.value.reduce((sum, f) => sum + f.weight, 0);
+  const boostMax = activeBoostRules.value.reduce((sum, r) => sum + r.boost, 0);
+  return factorMax + boostMax;
+});
 
 // ---------------------------------------------------------------------------
 // Generated sort_by (boolean sorts + weighted_score)
@@ -768,6 +765,8 @@ const generatedSortBy = computed(() => {
 function computeScore(doc: Record<string, unknown>): { score: number; breakdown: string[] } {
   let score = 0;
   const breakdown: string[] = [];
+
+  // Ranking factors (normalized)
   for (const f of activeFactors.value) {
     const raw = Number(doc[f.field] ?? 0);
     const stats = fieldStats.value[f.field];
@@ -776,16 +775,16 @@ function computeScore(doc: Record<string, unknown>): { score: number; breakdown:
     score += contribution;
     breakdown.push(`${friendlyFactorLabel(f.field)} ${contribution}/${f.weight}`);
   }
-  return { score: Math.round(score * 10), breakdown };
-}
 
-function computeBoostTier(doc: Record<string, unknown>): { level: number; label: string } {
-  for (const rule of activeBoostRules.value) {
-    if (ruleMatches(rule, doc)) {
-      return { level: rule.boost, label: friendlyFactorLabel(rule.field) };
+  // Boost rules (additive)
+  for (const r of activeBoostRules.value) {
+    if (ruleMatches(r, doc)) {
+      score += r.boost;
+      breakdown.push(`${friendlyFactorLabel(r.field)} +${r.boost}`);
     }
   }
-  return { level: 0, label: '' };
+
+  return { score, breakdown };
 }
 
 function ruleMatches(rule: BoostRule, doc: Record<string, unknown>): boolean {
@@ -1076,17 +1075,12 @@ async function fetchPreview() {
 function recomputePreview() {
   if (rawDocs.length === 0) { previewProducts.value = []; return; }
 
-  const maxScore = activeFactors.value.reduce((sum, f) => sum + f.weight, 0) * 10;
-
   const scored = rawDocs.map((doc) => {
     const { score, breakdown } = computeScore(doc);
-    const tier = computeBoostTier(doc);
     return {
       id: typeof doc.id === 'string' ? doc.id : JSON.stringify(doc.id ?? ''),
       title: typeof doc.name === 'string' ? doc.name : typeof doc.title === 'string' ? doc.title : JSON.stringify(doc.id ?? 'Untitled'),
-      score: Math.min(score, maxScore),
-      tierLevel: tier.level,
-      tierLabel: tier.label,
+      score,
       breakdown,
       doc,
     };
@@ -1100,11 +1094,10 @@ function recomputePreview() {
       const dir = sortEntries.find((e) => e.name === key)?.direction === 'asc' ? 1 : -1;
       if (av !== bv) return (bv - av) * dir;
     }
-    if (a.tierLevel !== b.tierLevel) return b.tierLevel - a.tierLevel;
     return b.score - a.score;
   });
 
-  previewProducts.value = scored.slice(0, 20);
+  previewProducts.value = scored.slice(0, 20).map(({ id, title, score, breakdown }) => ({ id, title, score, breakdown }));
 }
 
 // Re-rank when weights or boost rules change
