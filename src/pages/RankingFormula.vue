@@ -723,11 +723,19 @@ function friendlyFactorLabel(name: string): string {
   return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 
+const EXCLUDED_FACTOR_FIELDS = new Set(['weighted_score', 'default_rank', 'default_rank_with_pin']);
+
+function isTimestampField(name: string): boolean {
+  return /(_at|_date|_time|timestamp)$/i.test(name);
+}
+
 const availableFactorOptions = computed(() => {
   const used = new Set(rankingFactors.map((f) => f.field));
   const needle = factorFilterText.value.toLowerCase();
   return numericFields.value
     .filter((f) => !used.has(f.name))
+    .filter((f) => !EXCLUDED_FACTOR_FIELDS.has(f.name))
+    .filter((f) => !isTimestampField(f.name))
     .filter((f) => !needle || f.name.toLowerCase().includes(needle))
     .map((f) => ({ label: friendlyFactorLabel(f.name), value: f.name, type: f.type }));
 });
